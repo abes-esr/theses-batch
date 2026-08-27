@@ -1,0 +1,46 @@
+spring:
+  batch:
+    job:
+      enabled: false
+  datasource:
+    url: jdbc:h2:file:~/theses-batch-db
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+
+app:
+  root-dir: /starstock
+  output-dir: /output
+  max-files: 10000
+  offset: 50
+  nb-pages: 0
+  chunk-size: 100
+  max-workers: 2
+  
+  anr:
+    pattern: ANR-(?:\d{2}-)?[A-Za-z0-9]{4,8}(?:-\d{1,4})?\b
+  
+  exclude-keywords: annexe,resume,résumé,abstract,errata,summary,erratum,annexes,appendix,appendices,titre,couverture,couv,cover,synthese,synthèse,glossaire,illustr,diff,image,table,sommaire,garde,planche,annnexe,annex_
+
+logging:
+  level:
+    fr.theses.batch: INFO
+  file:
+    name: ${app.output-dir}/${java:java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd-HH-mm-ss"))}_batch.log
+
+task:
+  execution:
+    pool:
+      core-size: ${app.max-workers}
+      max-size: ${app.max-workers}

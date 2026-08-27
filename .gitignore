@@ -1,0 +1,34 @@
+# Build artifacts
+/target/
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Eclipse
+.bin/
+.classpath
+.project
+.settings/
+
+# VS Code
+.vscode/
+
+# Logs
+*.log
+/logs/
+
+# Database
+*.db
+*.mv.db
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db

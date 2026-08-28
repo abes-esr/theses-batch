@@ -39,10 +39,10 @@ public class ANRReader implements ItemReader<ANRMatchDTO> {
     
     @Autowired
     public ANRReader(ANRSearchService anrSearchService,
-                     @Value("${app.root-dir}") String rootDir,
-                     @Value("${app.exclude-keywords}") String excludeKeywords,
-                     @Value("${app.max-files:10000}") int maxFiles,
-                     @Value("${app.offset:0}") int offset) {
+                     @Value("${app.anr.root-dir}") String rootDir,
+                     @Value("${app.anr.exclude-keywords}") String excludeKeywords,
+                     @Value("${app.anr.max-files:10000}") int maxFiles,
+                     @Value("${app.anr.offset:0}") int offset) {
         this.anrSearchService = anrSearchService;
         this.rootDir = rootDir;
         this.excludeKeywords = Arrays.asList(excludeKeywords.split(","));

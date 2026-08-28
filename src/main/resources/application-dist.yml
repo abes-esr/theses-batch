@@ -1,0 +1,30 @@
+spring:
+  application:
+    name: theses-batch
+  batch:
+    job:
+      enabled: true
+  datasource:
+    h2:
+      jdbc-url: jdbc:h2:mem:batchdb;DB_CLOSE_DELAY=-1
+      username: sa
+      password: ""
+      driver-class-name: org.h2.Driver
+      initialization-mode: always
+
+app:
+  anr:
+    pattern: ANR-(?:\d{2}-)?[A-Za-z0-9]{4,8}(?:-\d{1,4})?\b
+    root-dir: C:/Users/delafontaine.LEVANT/Documents/STD/starstock
+    output-dir: /output
+    max-files: 10000
+    offset: 0
+    nb-pages: 50
+    chunk-size: 100
+    exclude-keywords: annexe,resume,résumé,abstract,errata,summary,erratum,annexes,appendix,appendices,titre,couverture,couv,cover,synthese,synthèse,glossaire,illustr,diff,image,table,sommaire,garde,planche,annnexe,annex_
+
+logging:
+  level:
+    fr.theses.batch: INFO
+  file:
+    name: ${app.anr.output-dir}/${java:java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd-HH-mm-ss"))}_batch.log

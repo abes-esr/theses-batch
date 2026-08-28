@@ -31,7 +31,7 @@ public class ANRWriter implements ItemWriter<ANRMatchDTO> {
     
     public ANRWriter(EntityManager entityManager,
                      ANRSearchService anrSearchService,
-                     @Value("${app.output-dir}") String outputDir) {
+                     @Value("${app.anr.output-dir}") String outputDir) {
         this.entityManager = entityManager;
         this.anrSearchService = anrSearchService;
         this.outputDir = outputDir;

@@ -25,7 +25,7 @@ public class ANRBatchConfiguration {
     private final int chunkSize;
     
     public ANRBatchConfiguration(
-            @Value("${app.chunk-size:100}") int chunkSize) {
+            @Value("${app.anr.chunk-size:100}") int chunkSize) {
         this.chunkSize = chunkSize;
     }
     
@@ -35,7 +35,7 @@ public class ANRBatchConfiguration {
     @Bean
     public ANRProcessor anrProcessor(ANRSearchService anrSearchService,
                                      PDFProcessingService pdfProcessingService,
-                                     @Value("${app.nb-pages:0}") int maxPages,
+                                     @Value("${app.anr.nb-pages:0}") int maxPages,
                                      @Value("${app.anr.pattern}") String anrPattern) {
         return new ANRProcessor(anrSearchService, pdfProcessingService, maxPages, anrPattern);
     }

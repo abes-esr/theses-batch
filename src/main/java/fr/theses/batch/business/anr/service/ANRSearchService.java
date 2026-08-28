@@ -20,7 +20,7 @@ public class ANRSearchService {
     
     public ANRSearchService(
             @Value("${app.anr.pattern}") String pattern,
-            @Value("${app.nb-pages:0}") int maxPages) {
+            @Value("${app.anr.nb-pages:0}") int maxPages) {
         this.anrPattern = Pattern.compile(pattern);
         this.maxPages = maxPages;
     }

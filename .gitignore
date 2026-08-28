@@ -28,6 +28,7 @@
 .env
 .env.local
 .env.*.local
+application.yml
 
 # OS
 .DS_Store

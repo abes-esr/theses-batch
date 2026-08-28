@@ -31,7 +31,7 @@ public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
     
     public ANRProcessor(ANRSearchService anrSearchService,
                         PDFProcessingService pdfProcessingService,
-                        @Value("${app.nb-pages:0}") int maxPages,
+                        @Value("${app.anr.nb-pages:0}") int maxPages,
                         @Value("${app.anr.pattern}") String anrPattern) {
         this.anrSearchService = anrSearchService;
         this.pdfProcessingService = pdfProcessingService;

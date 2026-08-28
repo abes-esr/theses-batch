@@ -35,8 +35,9 @@ public class ANRBatchConfiguration {
     @Bean
     public ANRProcessor anrProcessor(ANRSearchService anrSearchService,
                                      PDFProcessingService pdfProcessingService,
-                                     @Value("${app.nb-pages:0}") int maxPages) {
-        return new ANRProcessor(anrSearchService, pdfProcessingService, maxPages);
+                                     @Value("${app.nb-pages:0}") int maxPages,
+                                     @Value("${app.anr.pattern}") String anrPattern) {
+        return new ANRProcessor(anrSearchService, pdfProcessingService, maxPages, anrPattern);
     }
     
     /**

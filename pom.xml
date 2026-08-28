@@ -35,9 +35,9 @@
         
         <!-- PDF Processing -->
         <dependency>
-            <groupId>com.github.johnjore</groupId>
-            <artifactId>mupdf-jni</artifactId>
-            <version>1.23.4</version>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>3.0.0</version>
         </dependency>
         
         <!-- CSV Processing -->

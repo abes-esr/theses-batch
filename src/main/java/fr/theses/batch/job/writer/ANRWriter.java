@@ -1,6 +1,7 @@
 package fr.theses.batch.job.writer;
 
 import fr.theses.batch.business.anr.model.dto.ANRMatchDTO;
+import fr.theses.batch.business.anr.model.dto.ANRPageMatchDTO;
 import fr.theses.batch.business.anr.model.entity.ANRMatch;
 import fr.theses.batch.business.anr.service.ANRSearchService;
 import jakarta.persistence.EntityManager;
@@ -64,35 +65,51 @@ public class ANRWriter implements ItemWriter<ANRMatchDTO> {
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(csvFileName, true))) {
             // Écrire l'en-tête si le fichier est vide
             if (Files.size(Path.of(csvFileName)) == 0) {
-                writer.write("file_path,file_name,match_value,pages_analyzed,total_pages,processing_time,error_message\n");
+                writer.write("file_path,file_name,page_number,match_value,context_before,context_after,pages_analyzed,total_pages,processing_time,error_message\n");
             }
             
             for (ANRMatchDTO item : items) {
                 String filePath = item.getFilePath();
                 String fileName = item.getFileName();
+                String errorMessage = item.getErrorMessage();
                 
-                if (item.getMatches().isEmpty()) {
+                if (item.getPageMatches().isEmpty() && (errorMessage == null || errorMessage.isEmpty())) {
                     // Écrire une ligne même sans correspondances
-                    String line = String.format("\"%s\",\"%s\",\"\",%d,%d,%.2f,"%s\"\n",
+                    String line = String.format("\"%s\",\"%s\",\"\",\"\",\"\",\"\",%d,%d,%.2f,"%s\"\n",
                             escapeCsv(filePath),
                             escapeCsv(fileName),
                             item.getPagesAnalyzed(),
                             item.getTotalPages(),
                             item.getProcessingTime(),
-                            escapeCsv(item.getErrorMessage() != null ? item.getErrorMessage() : ""));
+                            escapeCsv(errorMessage != null ? errorMessage : ""));
                     writer.write(line);
                 } else {
-                    // Écrire une ligne par correspondance
-                    for (String match : item.getMatches()) {
-                        String line = String.format("\"%s\",\"%s\",\"%s\",%d,%d,%.2f,"\"\n",
+                    // Écrire une ligne par correspondance avec page
+                    for (ANRPageMatchDTO pageMatch : item.getPageMatches()) {
+                        String line = String.format("\"%s\",\"%s\",%d,"%s","%s","%s",%d,%d,%.2f,"\"\n",
                                 escapeCsv(filePath),
                                 escapeCsv(fileName),
-                                escapeCsv(match),
+                                pageMatch.getPageNumber(),
+                                escapeCsv(pageMatch.getMatchValue()),
+                                escapeCsv(pageMatch.getContextBefore()),
+                                escapeCsv(pageMatch.getContextAfter()),
                                 item.getPagesAnalyzed(),
                                 item.getTotalPages(),
                                 item.getProcessingTime());
                         writer.write(line);
                     }
+                }
+                
+                // Si erreur, écrire une ligne d'erreur
+                if (errorMessage != null && !errorMessage.isEmpty()) {
+                    String line = String.format("\"%s\",\"%s\",\"\",\"\",\"\",\"\",%d,%d,%.2f,"%s\"\n",
+                            escapeCsv(filePath),
+                            escapeCsv(fileName),
+                            item.getPagesAnalyzed(),
+                            item.getTotalPages(),
+                            item.getProcessingTime(),
+                            escapeCsv(errorMessage));
+                    writer.write(line);
                 }
             }
         }
@@ -108,13 +125,13 @@ public class ANRWriter implements ItemWriter<ANRMatchDTO> {
             String filePath = item.getFilePath();
             String fileName = item.getFileName();
             
-            for (String match : item.getMatches()) {
+            for (ANRPageMatchDTO pageMatch : item.getPageMatches()) {
                 ANRMatch entity = new ANRMatch();
                 entity.setFilePath(filePath);
                 entity.setFileName(fileName);
-                entity.setMatchValue(match);
+                entity.setMatchValue(pageMatch.getMatchValue());
                 entity.setProcessingDate(LocalDateTime.now());
-                entity.setPageNumber(null); // TODO: Implémenter si nécessaire
+                entity.setPageNumber(pageMatch.getPageNumber());
                 
                 entityManager.persist(entity);
             }

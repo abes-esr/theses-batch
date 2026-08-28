@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -25,9 +26,14 @@ public class ANRMatchDTO {
     private String fileName;
     
     /**
-     * Liste des correspondances ANR trouvées
+     * Liste des correspondances ANR trouvées (pour compatibilité)
      */
-    private List<String> matches;
+    private List<String> matches = new ArrayList<>();
+    
+    /**
+     * Liste des correspondances avec numéro de page et contexte
+     */
+    private List<ANRPageMatchDTO> pageMatches = new ArrayList<>();
     
     /**
      * Nombre de pages analysées

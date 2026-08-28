@@ -75,7 +75,7 @@ public class ANRWriter implements ItemWriter<ANRMatchDTO> {
                 
                 if (item.getPageMatches().isEmpty() && (errorMessage == null || errorMessage.isEmpty())) {
                     // Écrire une ligne même sans correspondances
-                    String line = String.format("\"%s\",\"%s\",\"\",\"\",\"\",\"\",%d,%d,%.2f,"%s\"\n",
+                    String line = String.format("\"%s\",\"%s\",\"\",\"\",\"\",\"\",%d,%d,%.2f,\"%s\"\n",
                             escapeCsv(filePath),
                             escapeCsv(fileName),
                             item.getPagesAnalyzed(),
@@ -86,7 +86,7 @@ public class ANRWriter implements ItemWriter<ANRMatchDTO> {
                 } else {
                     // Écrire une ligne par correspondance avec page
                     for (ANRPageMatchDTO pageMatch : item.getPageMatches()) {
-                        String line = String.format("\"%s\",\"%s\",%d,"%s","%s","%s",%d,%d,%.2f,"\"\n",
+                        String line = String.format("\"%s\",\"%s\",%d,\"%s\",\"%s\",\"%s\",%d,%d,%.2f,\"\"\n",
                                 escapeCsv(filePath),
                                 escapeCsv(fileName),
                                 pageMatch.getPageNumber(),
@@ -102,7 +102,7 @@ public class ANRWriter implements ItemWriter<ANRMatchDTO> {
                 
                 // Si erreur, écrire une ligne d'erreur
                 if (errorMessage != null && !errorMessage.isEmpty()) {
-                    String line = String.format("\"%s\",\"%s\",\"\",\"\",\"\",\"\",%d,%d,%.2f,"%s\"\n",
+                    String line = String.format("\"%s\",\"%s\",\"\",\"\",\"\",\"\",%d,%d,%.2f,\"%s\"\n",
                             escapeCsv(filePath),
                             escapeCsv(fileName),
                             item.getPagesAnalyzed(),

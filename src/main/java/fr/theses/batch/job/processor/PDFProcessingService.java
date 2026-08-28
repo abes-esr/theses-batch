@@ -1,5 +1,7 @@
 package fr.theses.batch.job.processor;
 
+import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.io.RandomAccessReadBufferedFile;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
@@ -34,7 +36,7 @@ public class PDFProcessingService {
             throw new IOException("File not found: " + filePath);
         }
         
-        try (PDDocument document = PDDocument.load(new File(filePath))) {
+        try (PDDocument document = Loader.loadPDF(new RandomAccessReadBufferedFile(new File(filePath)))) {
             int pageCount = document.getNumberOfPages();
             int pagesToRead = maxPages > 0 ? Math.min(maxPages, pageCount) : pageCount;
             
@@ -64,7 +66,7 @@ public class PDFProcessingService {
             throw new IOException("File not found: " + filePath);
         }
         
-        try (PDDocument document = PDDocument.load(new File(filePath))) {
+        try (PDDocument document = Loader.loadPDF(new RandomAccessReadBufferedFile(new File(filePath)))) {
             return document.getNumberOfPages();
         }
     }

@@ -26,7 +26,6 @@ app:
   offset: 50
   nb-pages: 0
   chunk-size: 100
-  max-workers: 2
   
   anr:
     pattern: ANR-(?:\d{2}-)?[A-Za-z0-9]{4,8}(?:-\d{1,4})?\b
@@ -38,9 +37,3 @@ logging:
     fr.theses.batch: INFO
   file:
     name: ${app.output-dir}/${java:java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd-HH-mm-ss"))}_batch.log
-
-task:
-  execution:
-    pool:
-      core-size: ${app.max-workers}
-      max-size: ${app.max-workers}

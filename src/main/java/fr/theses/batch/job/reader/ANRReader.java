@@ -52,10 +52,6 @@ public class ANRReader implements ItemReader<ANRMatchDTO> {
         initializeFileIterator();
     }
     
-    public ANRSearchService getAnrSearchService() {
-        return anrSearchService;
-    }
-    
     /**
      * Initialise l'itérateur de fichiers
      */

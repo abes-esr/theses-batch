@@ -11,7 +11,6 @@ import org.springframework.batch.core.Step;
 import org.springframework.batch.core.job.builder.JobBuilder;
 import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.step.builder.StepBuilder;
-import org.springframework.batch.item.support.SynchronizedItemStreamReader;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -24,23 +23,10 @@ import org.springframework.transaction.PlatformTransactionManager;
 public class ANRBatchConfiguration {
     
     private final int chunkSize;
-    private final int maxWorkers;
     
     public ANRBatchConfiguration(
-            @Value("${app.chunk-size:100}") int chunkSize,
-            @Value("${app.max-workers:2}") int maxWorkers) {
+            @Value("${app.chunk-size:100}") int chunkSize) {
         this.chunkSize = chunkSize;
-        this.maxWorkers = maxWorkers;
-    }
-    
-    /**
-     * Crée le reader ANR avec synchronisation pour la lecture multi-thread
-     */
-    @Bean
-    public SynchronizedItemStreamReader<ANRMatchDTO> anrSynchronizedReader(ANRReader anrReader) {
-        SynchronizedItemStreamReader<ANRMatchDTO> reader = new SynchronizedItemStreamReader<>();
-        reader.setDelegate(anrReader);
-        return reader;
     }
     
     /**
@@ -59,12 +45,12 @@ public class ANRBatchConfiguration {
     @Bean
     public Step anrStep(JobRepository jobRepository,
                         PlatformTransactionManager transactionManager,
-                        SynchronizedItemStreamReader<ANRMatchDTO> anrSynchronizedReader,
+                        ANRReader anrReader,
                         ANRProcessor anrProcessor,
                         ANRWriter anrWriter) {
         return new StepBuilder("anrStep", jobRepository)
                 .<ANRMatchDTO, ANRMatchDTO>chunk(chunkSize, transactionManager)
-                .reader(anrSynchronizedReader)
+                .reader(anrReader)
                 .processor(anrProcessor)
                 .writer(anrWriter)
                 .build();

@@ -3,9 +3,9 @@ package fr.theses.batch.job.configuration;
 import fr.theses.batch.business.anr.model.dto.ANRMatchDTO;
 import fr.theses.batch.business.anr.service.ANRSearchService;
 import fr.theses.batch.job.processor.ANRProcessor;
-import fr.theses.batch.job.processor.PDFProcessingService;
 import fr.theses.batch.job.reader.ANRReader;
 import fr.theses.batch.job.writer.ANRWriter;
+import fr.theses.batch.util.parser.PDFTextExtractor;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
 import org.springframework.batch.core.job.builder.JobBuilder;
@@ -34,10 +34,10 @@ public class ANRBatchConfiguration {
      */
     @Bean
     public ANRProcessor anrProcessor(ANRSearchService anrSearchService,
-                                     PDFProcessingService pdfProcessingService,
+                                     PDFTextExtractor pdfTextExtractor,
                                      @Value("${app.anr.nb-pages:0}") int maxPages,
                                      @Value("${app.anr.pattern}") String anrPattern) {
-        return new ANRProcessor(anrSearchService, pdfProcessingService, maxPages, anrPattern);
+        return new ANRProcessor(anrSearchService, pdfTextExtractor, maxPages, anrPattern);
     }
     
     /**

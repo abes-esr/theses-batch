@@ -3,6 +3,7 @@ package fr.theses.batch.job.processor;
 import fr.theses.batch.business.anr.model.dto.ANRMatchDTO;
 import fr.theses.batch.business.anr.model.dto.ANRPageMatchDTO;
 import fr.theses.batch.business.anr.service.ANRSearchService;
+import fr.theses.batch.util.parser.PDFTextExtractor;
 import org.springframework.batch.item.ItemProcessor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -25,16 +26,16 @@ public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
     private static final int CONTEXT_CHARACTERS = 50;
     
     private final ANRSearchService anrSearchService;
-    private final PDFProcessingService pdfProcessingService;
+    private final PDFTextExtractor pdfTextExtractor;
     private final int maxPages;
     private final Pattern anrPattern;
     
     public ANRProcessor(ANRSearchService anrSearchService,
-                        PDFProcessingService pdfProcessingService,
+                        PDFTextExtractor pdfTextExtractor,
                         @Value("${app.anr.nb-pages:0}") int maxPages,
                         @Value("${app.anr.pattern}") String anrPattern) {
         this.anrSearchService = anrSearchService;
-        this.pdfProcessingService = pdfProcessingService;
+        this.pdfTextExtractor = pdfTextExtractor;
         this.maxPages = maxPages;
         this.anrPattern = Pattern.compile(anrPattern);
     }
@@ -47,13 +48,13 @@ public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
             String filePath = item.getFilePath();
             
             // Lire les pages du PDF
-            List<PDFProcessingService.PDFPage> pages = pdfProcessingService.extractTextFromPdf(filePath, maxPages);
+            List<PDFTextExtractor.PDFPage> pages = pdfTextExtractor.extractTextFromPdf(filePath, maxPages);
             
             List<ANRPageMatchDTO> pageMatches = new ArrayList<>();
             int totalPages = pages.size();
             
             // Traiter chaque page
-            for (PDFProcessingService.PDFPage page : pages) {
+            for (PDFTextExtractor.PDFPage page : pages) {
                 String text = page.getText();
                 if (text == null || text.isEmpty()) {
                     continue;
@@ -82,7 +83,7 @@ public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
             // Mettre à jour le DTO
             item.setPageMatches(pageMatches);
             item.setPagesAnalyzed(pages.size());
-            item.setTotalPages(pdfProcessingService.getPageCount(filePath));
+            item.setTotalPages(pdfTextExtractor.getPageCount(filePath));
             
             // Calculer la durée
             Duration processingDuration = Duration.between(startTime, Instant.now());

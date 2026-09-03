@@ -4,6 +4,7 @@ import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.io.RandomAccessReadBufferedFile;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
+import org.springframework.stereotype.Service;
 
 import java.io.File;
 import java.io.IOException;
@@ -11,56 +12,21 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Utilitaire pour l'extraction de texte à partir de fichiers PDF
- * Utilise Apache PDFBox comme backend
+ * Service pour le traitement des fichiers PDF
+ * Utilise Apache PDFBox pour extraire le texte page par page
  */
+@Service
 public class PDFTextExtractor {
     
     /**
-     * Extrait le texte d'un fichier PDF
-     * 
-     * @param filePath Chemin du fichier PDF
-     * @return Texte extrait
-     * @throws IOException En cas d'erreur de lecture
-     */
-    public static String extractText(String filePath) throws IOException {
-        return extractText(filePath, 0);
-    }
-    
-    /**
-     * Extrait le texte d'un fichier PDF avec limite de pages
-     * 
-     * @param filePath Chemin du fichier PDF
-     * @param maxPages Nombre maximum de pages à lire (0 pour toutes)
-     * @return Texte extrait
-     * @throws IOException En cas d'erreur de lecture
-     */
-    public static String extractText(String filePath, int maxPages) throws IOException {
-        if (filePath == null || !new File(filePath).exists()) {
-            throw new IOException("File not found: " + filePath);
-        }
-        
-        try (PDDocument document = Loader.loadPDF(new RandomAccessReadBufferedFile(new File(filePath)))) {
-            int pageCount = document.getNumberOfPages();
-            int pagesToRead = maxPages > 0 ? Math.min(maxPages, pageCount) : pageCount;
-            
-            PDFTextStripper stripper = new PDFTextStripper();
-            stripper.setStartPage(1);
-            stripper.setEndPage(pagesToRead);
-            
-            return stripper.getText(document);
-        }
-    }
-    
-    /**
-     * Extrait le texte page par page
+     * Extrait le texte d'un fichier PDF avec un maximum de pages
      * 
      * @param filePath Chemin du fichier PDF
      * @param maxPages Nombre maximum de pages à lire (0 pour toutes)
      * @return Liste de pages avec leur numéro et contenu textuel
      * @throws IOException En cas d'erreur de lecture
      */
-    public static List<PDFPage> extractTextByPage(String filePath, int maxPages) throws IOException {
+    public List<PDFPage> extractTextFromPdf(String filePath, int maxPages) throws IOException {
         List<PDFPage> pages = new ArrayList<>();
         
         if (filePath == null || !new File(filePath).exists()) {
@@ -92,7 +58,7 @@ public class PDFTextExtractor {
      * @return Nombre de pages
      * @throws IOException En cas d'erreur de lecture
      */
-    public static int getPageCount(String filePath) throws IOException {
+    public int getPageCount(String filePath) throws IOException {
         if (filePath == null || !new File(filePath).exists()) {
             throw new IOException("File not found: " + filePath);
         }

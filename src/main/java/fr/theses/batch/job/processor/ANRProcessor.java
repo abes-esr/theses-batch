@@ -4,6 +4,7 @@ import fr.theses.batch.business.anr.model.dto.ANRMatchDTO;
 import fr.theses.batch.business.anr.model.dto.ANRPageMatchDTO;
 import fr.theses.batch.business.anr.service.ANRSearchService;
 import fr.theses.batch.util.parser.PDFTextExtractor;
+import jakarta.annotation.PostConstruct;
 import org.springframework.batch.item.ItemProcessor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -22,7 +23,7 @@ import java.util.regex.Pattern;
  */
 @Component("anrProcessor")
 public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
-    @Value("app.anr.nb-pages:0}")
+    @Value("${app.anr.nb-pages:50}")
     private int maxPages;
     @Value("${app.anr.pattern:''}")
     private final String anrPatternSource = "";
@@ -30,13 +31,17 @@ public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
     private int contextCharacters;
     private final ANRSearchService anrSearchService;
     private final PDFTextExtractor pdfTextExtractor;
-    private final Pattern anrPattern;
+    private Pattern anrPattern;
 
     public ANRProcessor(ANRSearchService anrSearchService,
                         PDFTextExtractor pdfTextExtractor
                         ) {
         this.anrSearchService = anrSearchService;
         this.pdfTextExtractor = pdfTextExtractor;
+    }
+
+    @PostConstruct
+    public void init() {
         this.anrPattern = Pattern.compile(anrPatternSource);
     }
     

@@ -1,6 +1,7 @@
 package fr.theses.batch.business.anr.service;
 
 import fr.theses.batch.business.anr.model.dto.ANRMatchDTO;
+import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -14,15 +15,15 @@ import java.util.regex.Pattern;
  */
 @Service
 public class ANRSearchService {
-    
-    private final Pattern anrPattern;
-    private final int maxPages;
-    
-    public ANRSearchService(
-            @Value("${app.anr.pattern}") String pattern,
-            @Value("${app.anr.nb-pages:0}") int maxPages) {
-        this.anrPattern = Pattern.compile(pattern);
-        this.maxPages = maxPages;
+    @Value("${app.anr.pattern:''}")
+    private String anrPatternSource;
+    @Value("${app.anr.nb-pages:50}")
+    private int maxPages;
+    private Pattern anrPattern;
+
+    @PostConstruct
+    public void init() {
+        this.anrPattern = Pattern.compile(anrPatternSource);
     }
     
     /**

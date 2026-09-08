@@ -1,11 +1,9 @@
 package fr.theses.batch.job.configuration;
 
 import fr.theses.batch.business.anr.model.dto.ANRMatchDTO;
-import fr.theses.batch.business.anr.service.ANRSearchService;
 import fr.theses.batch.job.processor.ANRProcessor;
 import fr.theses.batch.job.reader.ANRReader;
 import fr.theses.batch.job.writer.ANRWriter;
-import fr.theses.batch.util.parser.PDFTextExtractor;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
 import org.springframework.batch.core.job.builder.JobBuilder;
@@ -27,15 +25,6 @@ public class ANRBatchConfiguration {
     public ANRBatchConfiguration(
             @Value("${app.anr.chunk-size:100}") int chunkSize) {
         this.chunkSize = chunkSize;
-    }
-    
-    /**
-     * Crée le processor ANR
-     */
-    @Bean
-    public ANRProcessor anrProcessor(ANRSearchService anrSearchService,
-                                     PDFTextExtractor pdfTextExtractor) {
-        return new ANRProcessor(anrSearchService, pdfTextExtractor);
     }
     
     /**

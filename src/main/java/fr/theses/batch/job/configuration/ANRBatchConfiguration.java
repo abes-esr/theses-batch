@@ -36,8 +36,9 @@ public class ANRBatchConfiguration {
     public ANRProcessor anrProcessor(ANRSearchService anrSearchService,
                                      PDFTextExtractor pdfTextExtractor,
                                      @Value("${app.anr.nb-pages:0}") int maxPages,
-                                     @Value("${app.anr.pattern}") String anrPattern) {
-        return new ANRProcessor(anrSearchService, pdfTextExtractor, maxPages, anrPattern);
+                                     @Value("${app.anr.pattern}") String anrPattern,
+                                     @Value("50") int contextCharacters) {
+        return new ANRProcessor(anrSearchService, pdfTextExtractor, maxPages, anrPattern, contextCharacters);
     }
     
     /**

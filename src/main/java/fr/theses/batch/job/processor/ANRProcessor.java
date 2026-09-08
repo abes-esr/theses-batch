@@ -23,21 +23,23 @@ import java.util.regex.Pattern;
 @Component("anrProcessor")
 public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
     
-    private static final int CONTEXT_CHARACTERS = 50;
-    
     private final ANRSearchService anrSearchService;
     private final PDFTextExtractor pdfTextExtractor;
     private final int maxPages;
     private final Pattern anrPattern;
+    private final int contextCharacters;
     
     public ANRProcessor(ANRSearchService anrSearchService,
                         PDFTextExtractor pdfTextExtractor,
                         @Value("${app.anr.nb-pages:0}") int maxPages,
-                        @Value("${app.anr.pattern}") String anrPattern) {
+                        @Value("${app.anr.pattern}") String anrPattern,
+                        @Value("50") int contextCharacters
+                        ) {
         this.anrSearchService = anrSearchService;
         this.pdfTextExtractor = pdfTextExtractor;
         this.maxPages = maxPages;
         this.anrPattern = Pattern.compile(anrPattern);
+        this.contextCharacters = contextCharacters;
     }
     
     @Override
@@ -45,7 +47,7 @@ public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
         Instant startTime = Instant.now();
         
         try {
-            String filePath = item.getFilePath();
+            String filePath = item.filePath();
             
             // Lire les pages du PDF
             List<PDFTextExtractor.PDFPage> pages = pdfTextExtractor.extractTextFromPdf(filePath, maxPages);
@@ -68,34 +70,29 @@ public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
                     int end = matcher.end();
                     
                     // Extraire le contexte autour du match
-                    String contextBefore = extractContext(text, start, CONTEXT_CHARACTERS, true);
-                    String contextAfter = extractContext(text, end, CONTEXT_CHARACTERS, false);
+                    String contextBefore = extractContext(text, start, contextCharacters, true);
+                    String contextAfter = extractContext(text, end, contextCharacters, false);
                     
-                    ANRPageMatchDTO pageMatch = new ANRPageMatchDTO();
-                    pageMatch.setPageNumber(page.getPageNumber());
-                    pageMatch.setMatchValue(matchValue);
-                    pageMatch.setContextBefore(contextBefore);
-                    pageMatch.setContextAfter(contextAfter);
+                    ANRPageMatchDTO pageMatch = new ANRPageMatchDTO(page.getPageNumber(), matchValue, contextBefore, contextAfter);
                     pageMatches.add(pageMatch);
                 }
             }
             
-            // Mettre à jour le DTO
-            item.setPageMatches(pageMatches);
-            item.setPagesAnalyzed(pages.size());
-            item.setTotalPages(pdfTextExtractor.getPageCount(filePath));
-            
             // Calculer la durée
             Duration processingDuration = Duration.between(startTime, Instant.now());
-            item.setProcessingTime(processingDuration.toMillis() / 1000.0);
             
-            return item;
+            // Mettre à jour le DTO
+            return item
+                .withPageMatches(pageMatches)
+                .withPagesAnalyzed(pages.size())
+                .withTotalPages(pdfTextExtractor.getPageCount(filePath))
+                .withProcessingTime(processingDuration.toMillis() / 1000.0);
             
         } catch (IOException e) {
             Duration processingDuration = Duration.between(startTime, Instant.now());
-            item.setProcessingTime(processingDuration.toMillis() / 1000.0);
-            item.setErrorMessage("Erreur lors du traitement du fichier: " + e.getMessage());
-            return item;
+            return item
+                .withProcessingTime(processingDuration.toMillis() / 1000.0)
+                .withErrorMessage("Erreur lors du traitement du fichier: " + e.getMessage());
         }
     }
     

@@ -109,11 +109,6 @@ public class ANRReader implements ItemReader<ANRMatchDTO> {
         String fileName = anrSearchService.extractFileName(filePath);
         
         // Crée un DTO avec les informations de base
-        ANRMatchDTO dto = new ANRMatchDTO();
-        dto.setFilePath(filePath);
-        dto.setFileName(fileName);
-        dto.setMatches(new ArrayList<>());
-        
-        return dto;
+        return new ANRMatchDTO(filePath, fileName, new ArrayList<>(), new ArrayList<>(), 0, 0, 0.0, null);
     }
 }

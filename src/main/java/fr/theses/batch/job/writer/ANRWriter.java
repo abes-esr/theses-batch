@@ -3,7 +3,6 @@ package fr.theses.batch.job.writer;
 import fr.theses.batch.business.anr.model.dto.ANRMatchDTO;
 import fr.theses.batch.business.anr.model.dto.ANRPageMatchDTO;
 import fr.theses.batch.business.anr.model.entity.ANRMatch;
-import fr.theses.batch.business.anr.service.ANRSearchService;
 import jakarta.persistence.EntityManager;
 import org.springframework.batch.item.Chunk;
 import org.springframework.batch.item.ItemWriter;
@@ -26,14 +25,11 @@ import java.util.List;
 public class ANRWriter implements ItemWriter<ANRMatchDTO> {
     
     private final EntityManager entityManager;
-    private final ANRSearchService anrSearchService;
     private final String outputDir;
-    
+
     public ANRWriter(EntityManager entityManager,
-                     ANRSearchService anrSearchService,
                      @Value("${app.anr.output-dir:'/output'}") String outputDir) {
         this.entityManager = entityManager;
-        this.anrSearchService = anrSearchService;
         this.outputDir = outputDir;
     }
     

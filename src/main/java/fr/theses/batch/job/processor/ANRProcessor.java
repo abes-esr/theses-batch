@@ -27,7 +27,7 @@ public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
     private int maxPages;
     @Value("${app.anr.pattern:''}")
     private String anrPatternSource;
-    @Value("${app.anr.contextCharacters:50}")
+    @Value("${app.anr.context-characters:50}")
     private int contextCharacters;
     private final ANRSearchService anrSearchService;
     private final PDFTextExtractor pdfTextExtractor;

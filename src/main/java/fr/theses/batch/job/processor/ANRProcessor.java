@@ -26,7 +26,7 @@ public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
     @Value("${app.anr.nb-pages:50}")
     private int maxPages;
     @Value("${app.anr.pattern:''}")
-    private final String anrPatternSource = "";
+    private String anrPatternSource;
     @Value("${app.anr.contextCharacters:50}")
     private int contextCharacters;
     private final ANRSearchService anrSearchService;

@@ -84,14 +84,7 @@ public class ANRSearchService {
     public ANRMatchDTO createMatchDTO(String filePath, String fileName, List<String> matches, 
                                     int pagesAnalyzed, int totalPages, double processingTime, 
                                     String errorMessage) {
-        ANRMatchDTO dto = new ANRMatchDTO();
-        dto.setFilePath(filePath);
-        dto.setFileName(fileName);
-        dto.setMatches(matches != null ? new ArrayList<>(matches) : new ArrayList<>());
-        dto.setPagesAnalyzed(pagesAnalyzed);
-        dto.setTotalPages(totalPages);
-        dto.setProcessingTime(processingTime);
-        dto.setErrorMessage(errorMessage);
-        return dto;
+        return new ANRMatchDTO(filePath, fileName, matches, new ArrayList<>(), 
+                              pagesAnalyzed, totalPages, processingTime, errorMessage);
     }
 }

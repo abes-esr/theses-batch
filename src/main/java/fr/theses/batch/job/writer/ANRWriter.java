@@ -69,33 +69,33 @@ public class ANRWriter implements ItemWriter<ANRMatchDTO> {
             }
             
             for (ANRMatchDTO item : items) {
-                String filePath = item.getFilePath();
-                String fileName = item.getFileName();
-                String errorMessage = item.getErrorMessage();
+                String filePath = item.filePath();
+                String fileName = item.fileName();
+                String errorMessage = item.errorMessage();
                 
-                if (item.getPageMatches().isEmpty() && (errorMessage == null || errorMessage.isEmpty())) {
+                if (item.pageMatches().isEmpty() && (errorMessage == null || errorMessage.isEmpty())) {
                     // Écrire une ligne même sans correspondances
                     String line = String.format("\"%s\",\"%s\",\"\",\"\",\"\",\"\",%d,%d,%.2f,\"%s\"\n",
                             escapeCsv(filePath),
                             escapeCsv(fileName),
-                            item.getPagesAnalyzed(),
-                            item.getTotalPages(),
-                            item.getProcessingTime(),
+                            item.pagesAnalyzed(),
+                            item.totalPages(),
+                            item.processingTime(),
                             escapeCsv(errorMessage != null ? errorMessage : ""));
                     writer.write(line);
                 } else {
                     // Écrire une ligne par correspondance avec page
-                    for (ANRPageMatchDTO pageMatch : item.getPageMatches()) {
+                    for (ANRPageMatchDTO pageMatch : item.pageMatches()) {
                         String line = String.format("\"%s\",\"%s\",%d,\"%s\",\"%s\",\"%s\",%d,%d,%.2f,\"\"\n",
                                 escapeCsv(filePath),
                                 escapeCsv(fileName),
-                                pageMatch.getPageNumber(),
-                                escapeCsv(pageMatch.getMatchValue()),
-                                escapeCsv(pageMatch.getContextBefore()),
-                                escapeCsv(pageMatch.getContextAfter()),
-                                item.getPagesAnalyzed(),
-                                item.getTotalPages(),
-                                item.getProcessingTime());
+                                pageMatch.pageNumber(),
+                                escapeCsv(pageMatch.matchValue()),
+                                escapeCsv(pageMatch.contextBefore()),
+                                escapeCsv(pageMatch.contextAfter()),
+                                item.pagesAnalyzed(),
+                                item.totalPages(),
+                                item.processingTime());
                         writer.write(line);
                     }
                 }
@@ -105,9 +105,9 @@ public class ANRWriter implements ItemWriter<ANRMatchDTO> {
                     String line = String.format("\"%s\",\"%s\",\"\",\"\",\"\",\"\",%d,%d,%.2f,\"%s\"\n",
                             escapeCsv(filePath),
                             escapeCsv(fileName),
-                            item.getPagesAnalyzed(),
-                            item.getTotalPages(),
-                            item.getProcessingTime(),
+                            item.pagesAnalyzed(),
+                            item.totalPages(),
+                            item.processingTime(),
                             escapeCsv(errorMessage));
                     writer.write(line);
                 }
@@ -122,16 +122,16 @@ public class ANRWriter implements ItemWriter<ANRMatchDTO> {
      */
     private void writeToDatabase(List<? extends ANRMatchDTO> items) {
         for (ANRMatchDTO item : items) {
-            String filePath = item.getFilePath();
-            String fileName = item.getFileName();
+            String filePath = item.filePath();
+            String fileName = item.fileName();
             
-            for (ANRPageMatchDTO pageMatch : item.getPageMatches()) {
+            for (ANRPageMatchDTO pageMatch : item.pageMatches()) {
                 ANRMatch entity = new ANRMatch();
                 entity.setFilePath(filePath);
                 entity.setFileName(fileName);
-                entity.setMatchValue(pageMatch.getMatchValue());
+                entity.setMatchValue(pageMatch.matchValue());
                 entity.setProcessingDate(LocalDateTime.now());
-                entity.setPageNumber(pageMatch.getPageNumber());
+                entity.setPageNumber(pageMatch.pageNumber());
                 
                 entityManager.persist(entity);
             }

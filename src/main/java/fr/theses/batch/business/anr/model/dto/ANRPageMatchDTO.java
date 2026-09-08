@@ -1,34 +1,29 @@
 package fr.theses.batch.business.anr.model.dto;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.With;
 
 /**
  * DTO pour une correspondance ANR trouvée sur une page spécifique
  */
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
-public class ANRPageMatchDTO {
-    
+@With
+public record ANRPageMatchDTO(
     /**
      * Numéro de la page où la correspondance a été trouvée
      */
-    private int pageNumber;
+    int pageNumber,
     
     /**
      * Valeur de la correspondance ANR
      */
-    private String matchValue;
+    String matchValue,
     
     /**
      * Texte avant la correspondance (contexte)
      */
-    private String contextBefore;
+    String contextBefore,
     
     /**
      * Texte après la correspondance (contexte)
      */
-    private String contextAfter;
-}
+    String contextAfter
+) {}

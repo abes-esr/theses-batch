@@ -20,6 +20,7 @@ app:
     max-files: 10000
     offset: 0
     nb-pages: 50
+    context-characters: 50
     chunk-size: 100
     exclude-keywords: annexe,resume,résumé,abstract,errata,summary,erratum,annexes,appendix,appendices,titre,couverture,couv,cover,synthese,synthèse,glossaire,illustr,diff,image,table,sommaire,garde,planche,annnexe,annex_
 

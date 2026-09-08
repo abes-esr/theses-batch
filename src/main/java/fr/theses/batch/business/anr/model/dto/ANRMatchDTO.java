@@ -1,8 +1,6 @@
 package fr.theses.batch.business.anr.model.dto;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.With;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -10,48 +8,50 @@ import java.util.List;
 /**
  * DTO pour les résultats de recherche ANR dans les PDF
  */
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
-public class ANRMatchDTO {
-    
+@With
+public record ANRMatchDTO(
     /**
      * Chemin du fichier PDF
      */
-    private String filePath;
+    String filePath,
     
     /**
      * Nom du fichier
      */
-    private String fileName;
+    String fileName,
     
     /**
      * Liste des correspondances ANR trouvées (pour compatibilité)
      */
-    private List<String> matches = new ArrayList<>();
+    List<String> matches,
     
     /**
      * Liste des correspondances avec numéro de page et contexte
      */
-    private List<ANRPageMatchDTO> pageMatches = new ArrayList<>();
+    List<ANRPageMatchDTO> pageMatches,
     
     /**
      * Nombre de pages analysées
      */
-    private int pagesAnalyzed;
+    int pagesAnalyzed,
     
     /**
      * Nombre total de pages dans le PDF
      */
-    private int totalPages;
+    int totalPages,
     
     /**
      * Durée du traitement en secondes
      */
-    private double processingTime;
+    double processingTime,
     
     /**
      * Message d'erreur si applicable
      */
-    private String errorMessage;
+    String errorMessage
+) {
+    public ANRMatchDTO {
+        matches = matches != null ? new ArrayList<>(matches) : new ArrayList<>();
+        pageMatches = pageMatches != null ? new ArrayList<>(pageMatches) : new ArrayList<>();
+    }
 }

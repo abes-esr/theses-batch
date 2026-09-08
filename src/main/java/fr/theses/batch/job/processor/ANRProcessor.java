@@ -22,24 +22,22 @@ import java.util.regex.Pattern;
  */
 @Component("anrProcessor")
 public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
-    
+    @Value("app.anr.nb-pages:0}")
+    private int maxPages;
+    @Value("${app.anr.pattern:''}")
+    private final String anrPatternSource = "";
+    @Value("${app.anr.contextCharacters:50}")
+    private int contextCharacters;
     private final ANRSearchService anrSearchService;
     private final PDFTextExtractor pdfTextExtractor;
-    private final int maxPages;
     private final Pattern anrPattern;
-    private final int contextCharacters;
-    
+
     public ANRProcessor(ANRSearchService anrSearchService,
-                        PDFTextExtractor pdfTextExtractor,
-                        @Value("${app.anr.nb-pages:0}") int maxPages,
-                        @Value("${app.anr.pattern}") String anrPattern,
-                        @Value("50") int contextCharacters
+                        PDFTextExtractor pdfTextExtractor
                         ) {
         this.anrSearchService = anrSearchService;
         this.pdfTextExtractor = pdfTextExtractor;
-        this.maxPages = maxPages;
-        this.anrPattern = Pattern.compile(anrPattern);
-        this.contextCharacters = contextCharacters;
+        this.anrPattern = Pattern.compile(anrPatternSource);
     }
     
     @Override

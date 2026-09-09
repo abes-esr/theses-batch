@@ -2,7 +2,6 @@ package fr.theses.batch.job.processor;
 
 import fr.theses.batch.business.anr.model.dto.ANRMatchDTO;
 import fr.theses.batch.business.anr.model.dto.ANRPageMatchDTO;
-import fr.theses.batch.business.anr.service.ANRSearchService;
 import fr.theses.batch.util.parser.PDFTextExtractor;
 import jakarta.annotation.PostConstruct;
 import org.springframework.batch.item.ItemProcessor;
@@ -29,14 +28,10 @@ public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
     private String anrPatternSource;
     @Value("${app.anr.context-characters:50}")
     private int contextCharacters;
-    private final ANRSearchService anrSearchService;
     private final PDFTextExtractor pdfTextExtractor;
     private Pattern anrPattern;
 
-    public ANRProcessor(ANRSearchService anrSearchService,
-                        PDFTextExtractor pdfTextExtractor
-                        ) {
-        this.anrSearchService = anrSearchService;
+    public ANRProcessor(PDFTextExtractor pdfTextExtractor) {
         this.pdfTextExtractor = pdfTextExtractor;
     }
 
@@ -56,8 +51,7 @@ public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
             List<PDFTextExtractor.PDFPage> pages = pdfTextExtractor.extractTextFromPdf(filePath, maxPages);
             
             List<ANRPageMatchDTO> pageMatches = new ArrayList<>();
-            int totalPages = pages.size();
-            
+
             // Traiter chaque page
             for (PDFTextExtractor.PDFPage page : pages) {
                 String text = page.getText();

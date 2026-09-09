@@ -24,8 +24,5 @@ app:
     chunk-size: 100
     exclude-keywords: annexe,resume,résumé,abstract,errata,summary,erratum,annexes,appendix,appendices,titre,couverture,couv,cover,synthese,synthèse,glossaire,illustr,diff,image,table,sommaire,garde,planche,annnexe,annex_
 
-logging:
-  level:
-    fr.theses.batch: INFO
-  file:
-    name: ${app.anr.output-dir}/${java:java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd-HH-mm-ss"))}_batch.log
+# Logging : appenders et niveaux dans log4j2-spring.xml
+# Surcharge ponctuelle : --logging.level.fr.theses.batch=DEBUG

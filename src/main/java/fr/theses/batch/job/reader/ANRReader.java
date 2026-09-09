@@ -2,8 +2,7 @@ package fr.theses.batch.job.reader;
 
 import fr.theses.batch.business.anr.model.dto.ANRMatchDTO;
 import fr.theses.batch.business.anr.service.ANRSearchService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.batch.item.ItemReader;
 import org.springframework.batch.item.NonTransientResourceException;
 import org.springframework.batch.item.ParseException;
@@ -28,10 +27,9 @@ import java.util.stream.Stream;
  * Lit les fichiers PDF dans les répertoires spécifiés
  */
 @Component("anrReader")
+@Slf4j
 public class ANRReader implements ItemReader<ANRMatchDTO> {
-    
-    private static final Logger logger = LoggerFactory.getLogger(ANRReader.class);
-    
+
     private final ANRSearchService anrSearchService;
     private final String rootDir;
     private final List<String> excludeKeywords;
@@ -53,7 +51,7 @@ public class ANRReader implements ItemReader<ANRMatchDTO> {
         this.maxFiles = maxFiles;
         this.offset = offset;
         
-        logger.info("Initialisation ANRReader avec rootDir={}, maxFiles={}, offset={}", rootDir, maxFiles, offset);
+        log.info("Initialisation ANRReader avec rootDir={}, maxFiles={}, offset={}", rootDir, maxFiles, offset);
         initializeFileIterator();
     }
     
@@ -70,9 +68,9 @@ public class ANRReader implements ItemReader<ANRMatchDTO> {
                 fileIterator.next();
                 filesProcessed++;
             }
-            logger.info("Itérateur de fichiers initialisé avec {} fichiers PDF, offset={}", allFiles.size(), offset);
+            log.info("Itérateur de fichiers initialisé avec {} fichiers PDF, offset={}", allFiles.size(), offset);
         } catch (IOException e) {
-            logger.error("Erreur lors de l'initialisation de l'itérateur de fichiers", e);
+            log.error("Erreur lors de l'initialisation de l'itérateur de fichiers", e);
             throw new NonTransientResourceException("Failed to initialize file iterator", e);
         }
     }
@@ -88,7 +86,7 @@ public class ANRReader implements ItemReader<ANRMatchDTO> {
         
         Path rootPath = Path.of(rootDir);
         if (!Files.exists(rootPath)) {
-            logger.error("Le répertoire racine n'existe pas : {}", rootDir);
+            log.error("Le répertoire racine n'existe pas : {}", rootDir);
             throw new IOException("Root directory does not exist: " + rootDir);
         }
         
@@ -101,7 +99,7 @@ public class ANRReader implements ItemReader<ANRMatchDTO> {
                 .forEach(pdfFiles::add);
         }
 
-        logger.info("Nombre de fichiers PDF trouvés : {}", pdfFiles.size());
+        log.info("Nombre de fichiers PDF trouvés : {}", pdfFiles.size());
         
         return pdfFiles;
     }
@@ -110,9 +108,9 @@ public class ANRReader implements ItemReader<ANRMatchDTO> {
     public ANRMatchDTO read() throws Exception, UnexpectedInputException, ParseException, NonTransientResourceException {
         if (!fileIterator.hasNext() || filesProcessed >= maxFiles) {
             if (!fileIterator.hasNext()) {
-                logger.info("Fin de la lecture : aucun fichier supplémentaire disponible");
+                log.info("Fin de la lecture : aucun fichier supplémentaire disponible");
             } else {
-                logger.info("Limite de fichiers atteinte : {}/{}", filesProcessed, maxFiles);
+                log.info("Limite de fichiers atteinte : {}/{}", filesProcessed, maxFiles);
             }
             return null;
         }
@@ -123,7 +121,7 @@ public class ANRReader implements ItemReader<ANRMatchDTO> {
         String filePath = file.getAbsolutePath();
         String fileName = anrSearchService.extractFileName(filePath);
         
-        logger.debug("Traitement du fichier {}/{}: {}", filesProcessed, maxFiles, fileName);
+        log.debug("Traitement du fichier {}/{}: {}", filesProcessed, maxFiles, fileName);
         
         // Crée un DTO avec les informations de base
         return new ANRMatchDTO(filePath, fileName, new ArrayList<>(), new ArrayList<>(), 0, 0, 0.0, null);

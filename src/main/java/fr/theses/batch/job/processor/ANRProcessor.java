@@ -4,7 +4,7 @@ import fr.theses.batch.business.anr.model.dto.ANRMatchDTO;
 import fr.theses.batch.business.anr.model.dto.ANRPageMatchDTO;
 import fr.theses.batch.util.parser.PDFTextExtractor;
 import jakarta.annotation.PostConstruct;
-import org.springframework.batch.item.ItemProcessor;
+import org.springframework.batch.infrastructure.item.ItemProcessor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 

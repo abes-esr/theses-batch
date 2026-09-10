@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.2.0</version>
+        <version>4.1.1</version>
         <relativePath/>
     </parent>
     
@@ -18,15 +18,22 @@
     <description>Spring Batch application for theses processing</description>
     
     <properties>
-        <java.version>17</java.version>
-        <spring-batch.version>5.1.0</spring-batch.version>
+        <java.version>21</java.version>
     </properties>
     
     <dependencies>
-        <!-- Spring Boot Starters -->
+        <!--
+            Starter socle, declare explicitement pour une seule raison : exclure
+            Logback en un seul point. Tous les autres starters en dependent, et
+            la resolution Maven "le plus proche gagne" fait que cette declaration
+            de niveau 1 remplace leurs versions transitives de niveau 2, exclusion
+            comprise. Un starter ajoute plus tard ne peut donc pas reintroduire
+            Logback. NE PAS supprimer cette dependance : elle a l'air redondante,
+            elle ne l'est pas.
+        -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-batch</artifactId>
+            <artifactId>spring-boot-starter</artifactId>
             <exclusions>
                 <exclusion>
                     <groupId>org.springframework.boot</groupId>
@@ -34,15 +41,15 @@
                 </exclusion>
             </exclusions>
         </dependency>
+
+        <!-- Spring Boot Starters -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-batch</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-jpa</artifactId>
-            <exclusions>
-                <exclusion>
-                    <groupId>org.springframework.boot</groupId>
-                    <artifactId>spring-boot-starter-logging</artifactId>
-                </exclusion>
-            </exclusions>
         </dependency>
 
         <!-- Logging : Log4j2 en remplacement de Logback -->
@@ -56,13 +63,6 @@
             <groupId>org.apache.pdfbox</groupId>
             <artifactId>pdfbox</artifactId>
             <version>3.0.0</version>
-        </dependency>
-        
-        <!-- CSV Processing -->
-        <dependency>
-            <groupId>org.apache.commons</groupId>
-            <artifactId>commons-csv</artifactId>
-            <version>1.10.0</version>
         </dependency>
         
         <!-- Database -->
@@ -84,12 +84,6 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
-            <exclusions>
-                <exclusion>
-                    <groupId>org.springframework.boot</groupId>
-                    <artifactId>spring-boot-starter-logging</artifactId>
-                </exclusion>
-            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.springframework.batch</groupId>
@@ -99,12 +93,6 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
-            <exclusions>
-                <exclusion>
-                    <groupId>org.springframework.boot</groupId>
-                    <artifactId>spring-boot-starter-logging</artifactId>
-                </exclusion>
-            </exclusions>
         </dependency>
     </dependencies>
     

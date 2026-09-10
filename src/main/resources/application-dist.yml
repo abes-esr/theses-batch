@@ -17,7 +17,7 @@ app:
   anr:
     pattern: ANR-(?:\d{2}-)?[A-Za-z0-9]{4,8}(?:-\d{1,4})?\b
     root-dir: C:/Users/delafontaine.LEVANT/Documents/STD/starstock
-    output-dir: /output
+    output-dir: output
     max-files: 10000
     offset: 0
     nb-pages: 50

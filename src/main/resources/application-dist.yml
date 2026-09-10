@@ -4,6 +4,9 @@ spring:
   batch:
     job:
       enabled: true
+  # Depuis Spring Boot 4, spring-boot-starter-batch fonctionne sans base :
+  # le JobRepository est en memoire et aucune table BATCH_* n'est creee.
+  # Cette datasource ne sert donc qu'a JPA (entite ANRMatch ecrite par le writer).
   datasource:
     url: jdbc:h2:mem:batchdb;DB_CLOSE_DELAY=-1
     username: sa

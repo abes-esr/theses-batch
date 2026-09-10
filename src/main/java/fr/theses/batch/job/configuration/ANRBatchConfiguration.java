@@ -4,8 +4,8 @@ import fr.theses.batch.business.anr.model.dto.ANRMatchDTO;
 import fr.theses.batch.job.processor.ANRProcessor;
 import fr.theses.batch.job.reader.ANRReader;
 import fr.theses.batch.job.writer.ANRWriter;
-import org.springframework.batch.core.Job;
-import org.springframework.batch.core.Step;
+import org.springframework.batch.core.job.Job;
+import org.springframework.batch.core.step.Step;
 import org.springframework.batch.core.job.builder.JobBuilder;
 import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.step.builder.StepBuilder;
@@ -37,7 +37,8 @@ public class ANRBatchConfiguration {
                         ANRProcessor anrProcessor,
                         ANRWriter anrWriter) {
         return new StepBuilder("anrStep", jobRepository)
-                .<ANRMatchDTO, ANRMatchDTO>chunk(chunkSize, transactionManager)
+                .<ANRMatchDTO, ANRMatchDTO>chunk(chunkSize)
+                .transactionManager(transactionManager)
                 .reader(anrReader)
                 .processor(anrProcessor)
                 .writer(anrWriter)

@@ -39,17 +39,17 @@ public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
     public void init() {
         this.anrPattern = Pattern.compile(anrPatternSource);
     }
-    
+
     @Override
     public ANRMatchDTO process(ANRMatchDTO item) throws Exception {
         Instant startTime = Instant.now();
-        
+
         try {
             String filePath = item.filePath();
-            
+
             // Lire les pages du PDF
             List<PDFTextExtractor.PDFPage> pages = pdfTextExtractor.extractTextFromPdf(filePath, maxPages);
-            
+
             List<ANRPageMatchDTO> pageMatches = new ArrayList<>();
 
             // Traiter chaque page
@@ -58,38 +58,43 @@ public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
                 if (text == null || text.isEmpty()) {
                     continue;
                 }
-                
+
                 // Rechercher les motifs ANR dans cette page
                 Matcher matcher = anrPattern.matcher(text);
                 while (matcher.find()) {
                     String matchValue = matcher.group();
                     int start = matcher.start();
                     int end = matcher.end();
-                    
+
                     // Extraire le contexte autour du match
                     String contextBefore = extractContext(text, start, contextCharacters, true);
                     String contextAfter = extractContext(text, end, contextCharacters, false);
-                    
+
                     ANRPageMatchDTO pageMatch = new ANRPageMatchDTO(page.getPageNumber(), matchValue, contextBefore, contextAfter);
                     pageMatches.add(pageMatch);
                 }
             }
-            
+
+            // Si aucun match trouvé, retourner null pour ne pas écrire dans le CSV
+            if (pageMatches.isEmpty()) {
+                return null;
+            }
+
             // Calculer la durée
             Duration processingDuration = Duration.between(startTime, Instant.now());
-            
+
             // Mettre à jour le DTO
             return item
-                .withPageMatches(pageMatches)
-                .withPagesAnalyzed(pages.size())
-                .withTotalPages(pdfTextExtractor.getPageCount(filePath))
-                .withProcessingTime(processingDuration.toMillis() / 1000.0);
-            
+                    .withPageMatches(pageMatches)
+                    .withPagesAnalyzed(pages.size())
+                    .withTotalPages(pdfTextExtractor.getPageCount(filePath))
+                    .withProcessingTime(processingDuration.toMillis() / 1000.0);
+
         } catch (IOException e) {
             Duration processingDuration = Duration.between(startTime, Instant.now());
             return item
-                .withProcessingTime(processingDuration.toMillis() / 1000.0)
-                .withErrorMessage("Erreur lors du traitement du fichier: " + e.getMessage());
+                    .withProcessingTime(processingDuration.toMillis() / 1000.0)
+                    .withErrorMessage("Erreur lors du traitement du fichier: " + e.getMessage());
         }
     }
     

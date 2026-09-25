@@ -48,11 +48,9 @@ public class ANRSolrEnricherProcessor implements ItemProcessor<ANRMatchDTO, ANRM
 
     @Override
     public ANRMatchDTO process(ANRMatchDTO item) throws Exception {
-        Instant startTime = Instant.now();
-
         if (!solrClient.isEnabled()) {
             log.debug("Solr est désactivé, retour de l'item sans enrichissement");
-            return null;
+            return item;
         }
 
         try {
@@ -61,7 +59,7 @@ public class ANRSolrEnricherProcessor implements ItemProcessor<ANRMatchDTO, ANRM
             
             if (idStar == null || idStar.isBlank()) {
                 log.warn("Impossible d'extraire l'identifiant STAR du fichier: {}", item.filePath());
-                return null;
+                return item;
             }
 
             log.debug("Id STAR extrait: {} pour le fichier: {}", idStar, item.filePath());
@@ -74,7 +72,7 @@ public class ANRSolrEnricherProcessor implements ItemProcessor<ANRMatchDTO, ANRM
             
             if (solrDocument.isEmpty()) {
                 log.debug("Aucun document trouvé dans Solr pour l'id STAR: {}", idStar);
-                return null;
+                return item;
             }
 
             // 4. Extraire les champs enrichis

@@ -1,4 +1,4 @@
-package fr.theses.batch.config;
+package fr.theses.batch.client.config;
 
 import fr.theses.batch.client.SolrClient;
 import org.springframework.context.annotation.Bean;

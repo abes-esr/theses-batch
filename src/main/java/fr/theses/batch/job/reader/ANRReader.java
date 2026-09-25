@@ -124,6 +124,6 @@ public class ANRReader implements ItemReader<ANRMatchDTO> {
         log.debug("Traitement du fichier {}/{}: {}", filesProcessed, maxFiles, fileName);
         
         // Crée un DTO avec les informations de base
-        return new ANRMatchDTO(filePath, fileName, new ArrayList<>(), new ArrayList<>(), 0, 0, 0.0, null);
+        return new ANRMatchDTO(filePath, fileName, new ArrayList<>(), new ArrayList<>(), 0, 0, 0.0, null, null, null, null);
     }
 }

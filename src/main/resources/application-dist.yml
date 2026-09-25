@@ -24,6 +24,16 @@ app:
     context-characters: 50
     chunk-size: 100
     exclude-keywords: annexe,resume,résumé,abstract,errata,summary,erratum,annexes,appendix,appendices,titre,couverture,couv,cover,synthese,synthèse,glossaire,illustr,diff,image,table,sommaire,garde,planche,annnexe,annex_
+  solr:
+    enabled: true
+    base-url: http://denim.v102.abes.fr:8080/solr1
+    id-field: id
+    nnt-field: nnt
+    doi-field: doi
+    defense-date-field: dateSoutenance_dt
+    connect-timeout: 5000
+    read-timeout: 5000
+    rows: 1
 
 # Logging : appenders et niveaux dans log4j2-spring.xml
 # Surcharge ponctuelle : --logging.level.fr.theses.batch=DEBUG

@@ -42,13 +42,8 @@ public class ANRWriter implements ItemWriter<ANRMatchDTO> {
             Files.createDirectories(outputPath);
         }
 
-        // Trier par année de soutenance
-        List<ANRMatchDTO> sortedItems = chunk.getItems().stream()
-                .sorted(Comparator.comparing(this::extractYear))
-                .collect(Collectors.toList());
-
-        writeToCsv(sortedItems);
-        writeToDatabase(sortedItems);
+        writeToCsv(chunk.getItems());
+        writeToDatabase(chunk.getItems());
     }
 
     /**

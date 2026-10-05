@@ -10,10 +10,11 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.io.BufferedWriter;
-import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -28,21 +29,20 @@ import java.util.stream.Collectors;
 public class ANRWriter implements ItemWriter<ANRMatchDTO> {
 
     private final EntityManager entityManager;
-    private final String outputDir;
+    private final Path outputDir;
     private final String batchId;
 
     public ANRWriter(EntityManager entityManager,
                      @Value("${app.anr.output-dir:'/output'}") String outputDir) {
         this.entityManager = entityManager;
-        this.outputDir = outputDir;
+        this.outputDir = Path.of(Objects.requireNonNull(outputDir, "outputDir cannot be null"));
         this.batchId = String.valueOf(Instant.now().toEpochMilli());
     }
 
     @Override
     public void write(Chunk<? extends ANRMatchDTO> chunk) throws Exception {
-        Path outputPath = Path.of(outputDir);
-        if (!Files.exists(outputPath)) {
-            Files.createDirectories(outputPath);
+        if (!Files.exists(outputDir)) {
+            Files.createDirectories(outputDir);
         }
 
         writeToCsv(chunk.getItems());
@@ -56,31 +56,29 @@ public class ANRWriter implements ItemWriter<ANRMatchDTO> {
      * @return L'année ou "unknown" si la date n'est pas disponible
      */
     private String extractYear(ANRMatchDTO item) {
-        String defenseDate = item.defenseDate();
-        if (defenseDate == null || defenseDate.isEmpty()) {
+        if (item.defenseDate() == null) {
             return "unknown";
         }
-        // Chercher un pattern d'année (4 chiffres)
-        if (defenseDate.length() >= 4 && defenseDate.matches(".*\\d{4}.*")) {
-            return defenseDate.substring(0, 4);
-        }
-        return "unknown";
+        String defenseYear = String.valueOf(item.defenseDate().getYear());
+        return defenseYear;
     }
 
     private void writeToCsv(List<? extends ANRMatchDTO> items) throws IOException {
         // Grouper les items par année
         Map<String, List<ANRMatchDTO>> itemsByYear = items.stream()
-                .collect(Collectors.groupingBy(this::extractYear));
+                .collect(Collectors.groupingBy(item -> extractYear(item)));
 
         // Créer un fichier par année
         for (Map.Entry<String, List<ANRMatchDTO>> entry : itemsByYear.entrySet()) {
             String year = entry.getKey();
             List<ANRMatchDTO> yearItems = entry.getValue();
 
-            String csvFileName = outputDir + "/anr_results_" + batchId + "_" + year + ".csv";
-            boolean fileExists = Files.exists(Path.of(csvFileName));
+            Path csvFilePath = outputDir.resolve("anr_results_" + batchId + "_" + year + ".csv");
 
-            try (BufferedWriter writer = new BufferedWriter(new FileWriter(csvFileName, true))) {
+            boolean fileExists = Files.exists(csvFilePath);
+
+            try (BufferedWriter writer = Files.newBufferedWriter(csvFilePath, StandardCharsets.UTF_8,
+                    StandardOpenOption.CREATE, StandardOpenOption.APPEND)) {
                 // Écrire l'en-tête seulement si le fichier est nouveau
                 if (!fileExists) {
                     writer.write("file_path,file_name,page_number,match_value,context_before,context_after,pages_analyzed,total_pages,processing_time,error_message,nnt,doi,defense_date\n");
@@ -99,7 +97,7 @@ public class ANRWriter implements ItemWriter<ANRMatchDTO> {
         String errorMessage = item.errorMessage();
         String nnt = item.nnt();
         String doi = item.doi();
-        String defenseDate = item.defenseDate();
+        String defenseDate = String.valueOf(item.defenseDate());
 
         if (item.pageMatches().isEmpty() && (errorMessage == null || errorMessage.isEmpty())) {
             String line = String.format("\"%s\",\"%s\",\"\",\"\",\"\",\"\",%d,%d,%.2f,\"%s\",\"%s\",\"%s\",\"%s\"\n",
@@ -108,10 +106,10 @@ public class ANRWriter implements ItemWriter<ANRMatchDTO> {
                     item.pagesAnalyzed(),
                     item.totalPages(),
                     item.processingTime(),
-                    escapeCsv(errorMessage != null ? errorMessage : ""),
-                    escapeCsv(nnt != null ? nnt : ""),
-                    escapeCsv(doi != null ? doi : ""),
-                    escapeCsv(defenseDate != null ? defenseDate : ""));
+                    escapeCsv(errorMessage),
+                    escapeCsv(nnt),
+                    escapeCsv(doi),
+                    escapeCsv(defenseDate));
             writer.write(line);
         } else {
             for (ANRPageMatchDTO pageMatch : item.pageMatches()) {
@@ -126,9 +124,9 @@ public class ANRWriter implements ItemWriter<ANRMatchDTO> {
                         item.totalPages(),
                         item.processingTime(),
                         escapeCsv(""),
-                        escapeCsv(nnt != null ? nnt : ""),
-                        escapeCsv(doi != null ? doi : ""),
-                        escapeCsv(defenseDate != null ? defenseDate : ""));
+                        escapeCsv(nnt),
+                        escapeCsv(doi),
+                        escapeCsv(defenseDate));
                 writer.write(line);
             }
         }
@@ -141,9 +139,9 @@ public class ANRWriter implements ItemWriter<ANRMatchDTO> {
                     item.totalPages(),
                     item.processingTime(),
                     escapeCsv(errorMessage),
-                    escapeCsv(nnt != null ? nnt : ""),
-                    escapeCsv(doi != null ? doi : ""),
-                    escapeCsv(defenseDate != null ? defenseDate : ""));
+                    escapeCsv(nnt),
+                    escapeCsv(doi),
+                    escapeCsv(defenseDate));
             writer.write(line);
         }
     }
@@ -154,7 +152,7 @@ public class ANRWriter implements ItemWriter<ANRMatchDTO> {
             String fileName = item.fileName();
             String nnt = item.nnt();
             String doi = item.doi();
-            String defenseDate = item.defenseDate();
+            String defenseDate = String.valueOf(item.defenseDate());
 
             for (ANRPageMatchDTO pageMatch : item.pageMatches()) {
                 ANRMatch entity = new ANRMatch();

@@ -9,6 +9,7 @@ import org.springframework.batch.infrastructure.item.ItemProcessor;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Map;
 
 /**
@@ -87,12 +88,30 @@ public class ANRSolrEnricherProcessor implements ItemProcessor<ANRMatchDTO, ANRM
             return item
                     .withNnt(nnt)
                     .withDoi(doi)
-                    .withDefenseDate(defenseDate);
-
+                    .withDefenseDate(parseDefenseDate(defenseDate));
         } catch (Exception e) {
             log.error("Erreur lors de l'enrichissement Solr pour le fichier {}: {}", item.filePath(), e.getMessage(), e);
             return item
                     .withErrorMessage("Erreur Solr: " + e.getMessage());
+        }
+    }
+
+    private LocalDate parseDefenseDate(String defenseDate) {
+        if (defenseDate == null || defenseDate.isBlank()) {
+            return null;
+        }
+
+        try {
+            // Essayer d'abord le format UTC ISO-8601 (format star: "2018-12-12T23:59:59Z")
+            if (defenseDate.contains("T")) {
+                return Instant.parse(defenseDate).atZone(java.time.ZoneId.systemDefault()).toLocalDate();
+            }
+
+            // Sinon, essayer le format date simple (ex: "2018-12-12")
+            return LocalDate.parse(defenseDate);
+        } catch (Exception e) {
+            log.warn("Impossible de parser la date de soutenance: {} - {}", defenseDate, e.getMessage());
+            return null;
         }
     }
 

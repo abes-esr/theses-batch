@@ -2,6 +2,7 @@ package fr.theses.batch.business.anr.model.dto;
 
 import lombok.With;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -63,7 +64,7 @@ public record ANRMatchDTO(
     /**
      * Date de soutenance - enrichie depuis Solr
      */
-    String defenseDate
+    LocalDate defenseDate
 ) {
     public ANRMatchDTO {
         matches = matches != null ? new ArrayList<>(matches) : new ArrayList<>();

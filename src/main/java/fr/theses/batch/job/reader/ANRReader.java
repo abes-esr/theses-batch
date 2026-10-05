@@ -15,6 +15,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -124,6 +125,6 @@ public class ANRReader implements ItemReader<ANRMatchDTO> {
         log.debug("Traitement du fichier {}/{}: {}", filesProcessed, maxFiles, fileName);
         
         // Crée un DTO avec les informations de base
-        return new ANRMatchDTO(filePath, fileName, new ArrayList<>(), new ArrayList<>(), 0, 0, 0.0, null, null, null, null);
+        return new ANRMatchDTO(filePath, fileName, new ArrayList<>(), new ArrayList<>(), 0, 0, 0.0, null, null, null, (LocalDate) null);
     }
 }

@@ -32,6 +32,10 @@ public class SolrClient {
     private int readTimeout;
 
 
+    public SolrClient(RestClient.Builder restClientBuilder) {
+        this.restClientBuilder = restClientBuilder;
+    }
+
     @PostConstruct
     public void init() {
         String fullBaseUrl = getBaseUrl();
@@ -44,10 +48,6 @@ public class SolrClient {
                 .baseUrl(fullBaseUrl)
                 .requestFactory(requestFactory)
                 .build();
-    }
-
-    public SolrClient(RestClient.Builder restClientBuilder) {
-        this.restClientBuilder = restClientBuilder;
     }
 
     /**

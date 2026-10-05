@@ -10,7 +10,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
 import java.util.Map;
-import java.util.regex.Pattern;
 
 /**
  * Client REST générique pour interagir avec un serveur Solr.
@@ -34,12 +33,7 @@ public class SolrClient {
 
     @PostConstruct
     public void init() {
-        String fullBaseUrl = baseUrl;
-
-        if (!fullBaseUrl.startsWith("http://") && !fullBaseUrl.startsWith("https://")) {
-            log.warn("Solr base URL does not start with http:// or https://. Prepending http://. Base URL: {}", fullBaseUrl);
-            fullBaseUrl = "http://" + fullBaseUrl;
-        }
+        String fullBaseUrl = getBaseUrl();
 
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(connectTimeout);
@@ -243,6 +237,7 @@ public class SolrClient {
     public String getBaseUrl() {
         String fullBaseUrl = baseUrl;
         if (!fullBaseUrl.startsWith("http://") && !fullBaseUrl.startsWith("https://")) {
+            log.warn("Solr base URL does not start with http:// or https://. Prepending http://. Base URL: {}", fullBaseUrl);
             fullBaseUrl = "http://" + fullBaseUrl;
         }
         return fullBaseUrl;

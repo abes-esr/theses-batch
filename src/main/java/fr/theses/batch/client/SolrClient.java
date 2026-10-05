@@ -199,26 +199,10 @@ public class SolrClient {
      */
     private String escapeSolrValue(String value) {
         if (value == null) {
-            return "";
+            return "\"\"";
         }
-        // Échappement des caractères spéciaux Solr
-        return value.replace("\\", "\\\\")
-                     .replace("+", "\\+")
-                     .replace("-", "\\-")
-                     .replace("&", "\\&")
-                     .replace("|", "\\|")
-                     .replace("(", "\\(")
-                     .replace(")", "\\)")
-                     .replace("[", "\\[")
-                     .replace("]", "\\]")
-                     .replace("{", "\\{")
-                     .replace("}", "\\}")
-                     .replace("^", "\\^")
-                     .replace("~", "\\~")
-                     .replace(":", "\\:")
-                     .replace("\"", "\\\"")
-                     .replace("/", "\\/")
-                     .replace(" ", "\\ ");
+        // Échapper seulement \ et " pour les valeurs entre guillemets
+        return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
     }
 
     /**

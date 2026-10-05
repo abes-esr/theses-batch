@@ -14,6 +14,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -28,11 +29,13 @@ public class ANRWriter implements ItemWriter<ANRMatchDTO> {
 
     private final EntityManager entityManager;
     private final String outputDir;
+    private final String batchId;
 
     public ANRWriter(EntityManager entityManager,
                      @Value("${app.anr.output-dir:'/output'}") String outputDir) {
         this.entityManager = entityManager;
         this.outputDir = outputDir;
+        this.batchId = String.valueOf(Instant.now().toEpochMilli());
     }
 
     @Override
@@ -74,7 +77,7 @@ public class ANRWriter implements ItemWriter<ANRMatchDTO> {
             String year = entry.getKey();
             List<ANRMatchDTO> yearItems = entry.getValue();
 
-            String csvFileName = outputDir + "/anr_results_" + year + ".csv";
+            String csvFileName = outputDir + "/anr_results_" + batchId + "_" + year + ".csv";
             boolean fileExists = Files.exists(Path.of(csvFileName));
 
             try (BufferedWriter writer = new BufferedWriter(new FileWriter(csvFileName, true))) {

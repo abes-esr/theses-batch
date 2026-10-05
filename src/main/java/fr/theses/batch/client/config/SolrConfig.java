@@ -36,15 +36,4 @@ public class SolrConfig {
         return RestClient.builder()
                 .messageConverters(List.of(jsonConverter));
     }
-
-    /**
-     * Crée le client Solr avec injection des paramètres.
-     * 
-     * @param restClientBuilder Builder pour RestClient
-     * @return SolrClient configuré
-     */
-    @Bean
-    public SolrClient solrClient(RestClient.Builder restClientBuilder) {
-        return new SolrClient(restClientBuilder);
-    }
 }

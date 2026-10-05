@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
 import java.util.Map;
+import java.util.List;
 
 /**
  * Client REST générique pour interagir avec un serveur Solr.
@@ -136,12 +137,12 @@ public class SolrClient {
         }
         
         Object docsObj = solrResponse.get("docs");
-        if (!(docsObj instanceof java.util.List)) {
+        if (!(docsObj instanceof List)) {
             log.warn("Réponse Solr invalide: 'docs' n'est pas une List");
             return Map.of();
         }
         
-        java.util.List<Object> docs = (java.util.List<Object>) docsObj;
+        List<Object> docs = (List<Object>) docsObj;
         
         if (docs.isEmpty()) {
             log.debug("Aucun document trouvé dans la réponse Solr");
@@ -180,8 +181,8 @@ public class SolrClient {
             return (String) fieldValue;
         }
         
-        if (fieldValue instanceof java.util.List) {
-            java.util.List<?> list = (java.util.List<?>) fieldValue;
+        if (fieldValue instanceof List) {
+            List<?> list = (List<?>) fieldValue;
             if (!list.isEmpty() && list.get(0) instanceof String) {
                 return (String) list.get(0);
             }

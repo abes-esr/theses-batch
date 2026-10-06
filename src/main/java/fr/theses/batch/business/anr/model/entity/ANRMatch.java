@@ -62,4 +62,22 @@ public class ANRMatch {
      */
     @Column(name = "execution_id")
     private Long executionId;
+    
+    /**
+     * Numéro National de Thèse (NNT) - enrichi depuis Solr
+     */
+    @Column(name = "nnt", length = 100)
+    private String nnt;
+    
+    /**
+     * Digital Object Identifier (DOI) - enrichi depuis Solr
+     */
+    @Column(name = "doi", length = 255)
+    private String doi;
+    
+    /**
+     * Date de soutenance - enrichie depuis Solr
+     */
+    @Column(name = "defense_date", length = 50)
+    private String defenseDate;
 }

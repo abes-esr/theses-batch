@@ -33,7 +33,6 @@ app:
     defense-date-field: dateSoutenance_dt
     connect-timeout: 5000
     read-timeout: 5000
-    rows: 1
 
 # Logging : appenders et niveaux dans log4j2-spring.xml
 # Surcharge ponctuelle : --logging.level.fr.theses.batch=DEBUG

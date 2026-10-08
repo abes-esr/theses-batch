@@ -6,9 +6,13 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.http.converter.HttpMessageConverter;
+import org.springframework.http.converter.json.JacksonJsonHttpMessageConverter;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.List;
 
@@ -47,7 +51,22 @@ public class SolrClient {
         this.restClient = restClientBuilder
                 .baseUrl(fullBaseUrl)
                 .requestFactory(requestFactory)
+                .configureMessageConverters(converters -> converters.configureMessageConverters(this::acceptTextPlainAsJson))
                 .build();
+    }
+
+    /**
+     * Fait accepter text/plain au convertisseur JSON auto-configuré par Spring Boot,
+     * Solr pouvant renvoyer du JSON sous ce type.
+     *
+     * @param converter Convertisseur à configurer
+     */
+    private void acceptTextPlainAsJson(HttpMessageConverter<?> converter) {
+        if (converter instanceof JacksonJsonHttpMessageConverter jsonConverter) {
+            List<MediaType> mediaTypes = new ArrayList<>(jsonConverter.getSupportedMediaTypes());
+            mediaTypes.add(new MediaType("text", "plain", StandardCharsets.UTF_8));
+            jsonConverter.setSupportedMediaTypes(mediaTypes);
+        }
     }
 
     /**

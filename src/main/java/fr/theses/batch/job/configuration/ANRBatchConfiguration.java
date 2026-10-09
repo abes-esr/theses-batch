@@ -4,13 +4,13 @@ import fr.theses.batch.business.anr.model.dto.ANRMatchDTO;
 import fr.theses.batch.job.processor.ANRProcessor;
 import fr.theses.batch.job.processor.ANRSolrEnricherProcessor;
 import fr.theses.batch.job.reader.ANRReader;
-import fr.theses.batch.job.writer.ANRWriter;
 import org.springframework.batch.core.job.Job;
 import org.springframework.batch.core.step.Step;
 import org.springframework.batch.core.job.builder.JobBuilder;
 import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.step.builder.StepBuilder;
 import org.springframework.batch.infrastructure.item.support.CompositeItemProcessor;
+import org.springframework.batch.infrastructure.item.support.CompositeItemWriter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -51,13 +51,13 @@ public class ANRBatchConfiguration {
                         PlatformTransactionManager transactionManager,
                         ANRReader anrReader,
                         CompositeItemProcessor<ANRMatchDTO, ANRMatchDTO> anrCompositeProcessor,
-                        ANRWriter anrWriter) {
+                        CompositeItemWriter<ANRMatchDTO> anrCompositeWriter) {
         return new StepBuilder("anrStep", jobRepository)
                 .<ANRMatchDTO, ANRMatchDTO>chunk(chunkSize)
                 .transactionManager(transactionManager)
                 .reader(anrReader)
                 .processor(anrCompositeProcessor)
-                .writer(anrWriter)
+                .writer(anrCompositeWriter)
                 .build();
     }
     

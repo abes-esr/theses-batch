@@ -24,6 +24,15 @@ app:
     context-characters: 50
     chunk-size: 100
     exclude-keywords: annexe,resume,résumé,abstract,errata,summary,erratum,annexes,appendix,appendices,titre,couverture,couv,cover,synthese,synthèse,glossaire,illustr,diff,image,table,sommaire,garde,planche,annnexe,annex_
+    # Configuration des writers
+    writers:
+      enabled: csv,json
+    # Configuration CSV
+    csv:
+      header: file_path,file_name,page_number,match_value,context_before,context_after,pages_analyzed,total_pages,processing_time,error_message
+    # Configuration JSON
+    json:
+      pretty-print: true
   solr:
     enabled: true
     base-url: http://denim.v102.abes.fr:8080/solr1

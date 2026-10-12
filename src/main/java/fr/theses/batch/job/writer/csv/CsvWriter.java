@@ -14,8 +14,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -24,6 +24,62 @@ import java.util.stream.Collectors;
  */
 @Component
 public class CsvWriter implements ANRFormatWriter {
+
+    /**
+     * Enum définissant les champs possibles et leurs extracteurs de valeurs
+     */
+    private enum CsvField {
+        FILE_PATH("file_path", true, item -> item.filePath(), (item, page) -> item.filePath()),
+        FILE_NAME("file_name", true, item -> item.fileName(), (item, page) -> item.fileName()),
+        PAGE_NUMBER("page_number", false, item -> "", (item, page) -> String.valueOf(page.pageNumber())),
+        MATCH_VALUE("match_value", true, item -> "", (item, page) -> page.matchValue()),
+        CONTEXT_BEFORE("context_before", true, item -> "", (item, page) -> page.contextBefore()),
+        CONTEXT_AFTER("context_after", true, item -> "", (item, page) -> page.contextAfter()),
+        PAGES_ANALYZED("pages_analyzed", false, item -> String.valueOf(item.pagesAnalyzed()), (item, page) -> String.valueOf(item.pagesAnalyzed())),
+        TOTAL_PAGES("total_pages", false, item -> String.valueOf(item.totalPages()), (item, page) -> String.valueOf(item.totalPages())),
+        PROCESSING_TIME("processing_time", false, item -> String.format("%.2f", item.processingTime()), (item, page) -> String.format("%.2f", item.processingTime())),
+        ERROR_MESSAGE("error_message", true, item -> item.errorMessage() != null ? item.errorMessage() : "", (item, page) -> ""),
+        NNT("nnt", true, item -> item.nnt() != null ? item.nnt() : "", (item, page) -> item.nnt() != null ? item.nnt() : ""),
+        DOI("doi", true, item -> item.doi() != null ? item.doi() : "", (item, page) -> item.doi() != null ? item.doi() : ""),
+        DEFENSE_DATE("defense_date", true, item -> item.defenseDate() != null ? String.valueOf(item.defenseDate()) : "", (item, page) -> item.defenseDate() != null ? String.valueOf(item.defenseDate()) : "");
+
+        private final String name;
+        private final boolean needsEscape;
+        private final Function<ANRMatchDTO, String> itemExtractor;
+        private final java.util.function.BiFunction<ANRMatchDTO, ANRPageMatchDTO, String> pageExtractor;
+
+        CsvField(String name, boolean needsEscape, Function<ANRMatchDTO, String> itemExtractor, java.util.function.BiFunction<ANRMatchDTO, ANRPageMatchDTO, String> pageExtractor) {
+            this.name = name;
+            this.needsEscape = needsEscape;
+            this.itemExtractor = itemExtractor;
+            this.pageExtractor = pageExtractor;
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public boolean needsEscape() {
+            return needsEscape;
+        }
+
+        public Function<ANRMatchDTO, String> getItemExtractor() {
+            return itemExtractor;
+        }
+
+        public java.util.function.BiFunction<ANRMatchDTO, ANRPageMatchDTO, String> getPageExtractor() {
+            return pageExtractor;
+        }
+
+        public static CsvField fromName(String name) {
+            for (CsvField field : values()) {
+                if (field.name.equalsIgnoreCase(name)) {
+                    return field;
+                }
+            }
+            throw new IllegalArgumentException("Unknown CSV field: " + name);
+        }
+    }
 
     private static final DateTimeFormatter TIMESTAMP_FORMATTER =
             DateTimeFormatter.ofPattern("yyyy-MM-dd-HH-mm-ss");
@@ -34,6 +90,7 @@ public class CsvWriter implements ANRFormatWriter {
 
     private final String outputDir;
     private final String csvHeader;
+    private final List<CsvField> configuredFields;
 
     public CsvWriter(
             @Value("${app.anr.output-dir:'/output'}") String outputDir,
@@ -41,6 +98,20 @@ public class CsvWriter implements ANRFormatWriter {
             String csvHeader) {
         this.outputDir = outputDir;
         this.csvHeader = csvHeader;
+        this.configuredFields = parseHeader(csvHeader);
+    }
+
+    /**
+     * Parse le header CSV configuré pour extraire les champs à inclure
+     */
+    private List<CsvField> parseHeader(String header) {
+        if (header == null || header.isBlank()) {
+            return List.of();
+        }
+        return Arrays.stream(header.split(","))
+                .map(String::trim)
+                .map(CsvField::fromName)
+                .collect(Collectors.toList());
     }
 
     @Override
@@ -92,58 +163,69 @@ public class CsvWriter implements ANRFormatWriter {
     }
 
     private void writeItemToCsv(BufferedWriter writer, ANRMatchDTO item) throws IOException {
-        String filePath = item.filePath();
-        String fileName = item.fileName();
         String errorMessage = item.errorMessage();
-        String nnt = item.nnt();
-        String doi = item.doi();
-        String defenseDate = String.valueOf(item.defenseDate());
 
         if (item.pageMatches().isEmpty() && (errorMessage == null || errorMessage.isEmpty())) {
-            String line = String.format("\"%s\",\"%s\",\"\",\"\",\"\",\"\",%d,%d,%.2f,\"%s\",\"%s\",\"%s\",\"%s\"\n",
-                    escapeCsv(filePath),
-                    escapeCsv(fileName),
-                    item.pagesAnalyzed(),
-                    item.totalPages(),
-                    item.processingTime(),
-                    escapeCsv(errorMessage),
-                    escapeCsv(nnt),
-                    escapeCsv(doi),
-                    escapeCsv(defenseDate));
+            String line = buildCsvLine(item, null, false);
             writer.write(line);
         } else {
             for (ANRPageMatchDTO pageMatch : item.pageMatches()) {
-                String line = String.format("\"%s\",\"%s\",%d,\"%s\",\"%s\",\"%s\",%d,%d,%.2f,\"%s\",\"%s\",\"%s\",\"%s\"\n",
-                        escapeCsv(filePath),
-                        escapeCsv(fileName),
-                        pageMatch.pageNumber(),
-                        escapeCsv(pageMatch.matchValue()),
-                        escapeCsv(pageMatch.contextBefore()),
-                        escapeCsv(pageMatch.contextAfter()),
-                        item.pagesAnalyzed(),
-                        item.totalPages(),
-                        item.processingTime(),
-                        escapeCsv(""),
-                        escapeCsv(nnt),
-                        escapeCsv(doi),
-                        escapeCsv(defenseDate));
+                String line = buildCsvLine(item, pageMatch, false);
                 writer.write(line);
             }
         }
 
         if (errorMessage != null && !errorMessage.isEmpty()) {
-            String line = String.format("\"%s\",\"%s\",\"\",\"\",\"\",\"\",%d,%d,%.2f,\"%s\",\"%s\",\"%s\",\"%s\"\n",
-                    escapeCsv(filePath),
-                    escapeCsv(fileName),
-                    item.pagesAnalyzed(),
-                    item.totalPages(),
-                    item.processingTime(),
-                    escapeCsv(errorMessage),
-                    escapeCsv(nnt),
-                    escapeCsv(doi),
-                    escapeCsv(defenseDate));
+            String line = buildCsvLine(item, null, true);
             writer.write(line);
         }
+    }
+
+    /**
+     * Construit une ligne CSV dynamiquement en fonction des champs configurés
+     */
+    private String buildCsvLine(ANRMatchDTO item, ANRPageMatchDTO pageMatch, boolean isErrorLine) {
+        StringBuilder line = new StringBuilder();
+
+        for (int i = 0; i < configuredFields.size(); i++) {
+            CsvField field = configuredFields.get(i);
+            String value;
+
+            if (pageMatch != null) {
+                // Cas avec pageMatch
+                value = field.getPageExtractor().apply(item, pageMatch);
+            } else if (isErrorLine) {
+                // Cas ligne d'erreur
+                if ("error_message".equals(field.getName())) {
+                    value = item.errorMessage() != null ? item.errorMessage() : "";
+                } else {
+                    value = field.getItemExtractor().apply(item);
+                }
+            } else {
+                // Cas sans pageMatch et sans erreur
+                value = field.getItemExtractor().apply(item);
+            }
+
+            // Échapper la valeur si nécessaire
+            if (field.needsEscape() && value != null && !value.isEmpty()) {
+                value = QUOTE + value.replace(QUOTE, QUOTE + QUOTE) + QUOTE;
+            }
+
+            // Ajouter la valeur (vide si null)
+            if (value == null) {
+                value = "";
+            }
+
+            line.append(value);
+
+            // Ajouter une virgule sauf pour le dernier champ
+            if (i < configuredFields.size() - 1) {
+                line.append(COMMA);
+            }
+        }
+
+        line.append(NEWLINE);
+        return line.toString();
     }
 
     private String escapeCsv(String value) {

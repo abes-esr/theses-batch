@@ -94,7 +94,7 @@ public class CsvWriter implements ANRFormatWriter {
 
     public CsvWriter(
             @Value("${app.anr.output-dir:'/output'}") String outputDir,
-            @Value("${app.anr.csv.header:file_path,file_name,page_number,match_value,context_before,context_after,pages_analyzed,total_pages,processing_time,error_message,nnt,doi,defense_date}")
+            @Value("${app.anr.writers.header:file_path,file_name,page_number,match_value,context_before,context_after,pages_analyzed,total_pages,processing_time,error_message,nnt,doi,defense_date}")
             String csvHeader) {
         this.outputDir = outputDir;
         this.csvHeader = csvHeader;
@@ -208,7 +208,10 @@ public class CsvWriter implements ANRFormatWriter {
 
             // Échapper la valeur si nécessaire
             if (field.needsEscape() && value != null && !value.isEmpty()) {
-                value = QUOTE + value.replace(QUOTE, QUOTE + QUOTE) + QUOTE;
+                value = value.replace(QUOTE, QUOTE + QUOTE)
+                        .replace("\n", " ")
+                        .replace("\r", " ");
+                value = QUOTE + value + QUOTE;
             }
 
             // Ajouter la valeur (vide si null)

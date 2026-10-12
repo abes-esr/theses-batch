@@ -1,6 +1,7 @@
 package fr.theses.batch.job.writer.json;
 
 import fr.theses.batch.business.anr.model.dto.ANRMatchDTO;
+import fr.theses.batch.business.anr.model.dto.ANRPageMatchDTO;
 import fr.theses.batch.job.writer.ANRFormatWriter;
 import org.springframework.batch.infrastructure.item.Chunk;
 import org.springframework.beans.factory.annotation.Value;
@@ -90,7 +91,7 @@ public class JsonWriter implements ANRFormatWriter {
     public JsonWriter(
             @Value("${app.anr.output-dir:'/output'}") String outputDir,
             @Value("${app.anr.json.pretty-print:true}") boolean prettyPrint,
-            @Value("${app.anr.csv.header:file_path,file_name,page_number,match_value,context_before,context_after,pages_analyzed,total_pages,processing_time,error_message,nnt,doi,defense_date}") String jsonHeader) {
+            @Value("${app.anr.writers.header:file_path,file_name,page_number,match_value,context_before,context_after,pages_analyzed,total_pages,processing_time,error_message,nnt,doi,defense_date}") String jsonHeader) {
         this.outputDir = outputDir;
         this.prettyPrint = prettyPrint;
         this.jsonHeader = jsonHeader;

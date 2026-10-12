@@ -28,9 +28,8 @@ app:
     writers:
       enabled: csv,json
     # Configuration CSV
-    csv:
-      header: file_path,file_name,page_number,match_value,context_before,context_after,pages_analyzed,total_pages,processing_time,error_message
-    # Configuration JSON
+#      header: file_path,file_name,page_number,match_value,context_before,context_after,pages_analyzed,total_pages,processing_time,nnt,doi,defense_date,error_message
+      header: file_path,file_name,page_number,match_value,context_before,context_after,pages_analyzed,total_pages,processing_time,nnt,doi,defense_date,error_message
     json:
       pretty-print: true
   solr:

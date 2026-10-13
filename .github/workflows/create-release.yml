@@ -1,0 +1,143 @@
+name: 'Create release'
+
+on:
+  workflow_dispatch:
+    inputs:
+      bumpType:
+        description: 'Quel type de version ?'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - major
+          - minor
+          - patch
+      dryRun:
+        description: 'Simuler : calculer la version sans créer le tag ni la release'
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: create-release
+  cancel-in-progress: false
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: 'Verify release is created only on "main" or "master" git branch'
+        if: github.ref_name != 'main' && github.ref_name != 'master'
+        run: |
+          echo "::error::A release can only be created from 'main' or 'master' (current branch: ${{ github.ref_name }})"
+          exit 1
+
+      - name: 'Checkout source code'
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: '0'
+          # Le PAT est indispensable : un tag poussé avec le GITHUB_TOKEN par défaut ne
+          # déclenche aucun workflow (garde-fou anti-récursion de GitHub). Sans lui, la
+          # release réussirait mais build-test-pubshtodockerhub.yml ne partirait pas et
+          # l'image abesesr/theses:X.Y.Z-batch ne serait jamais publiée.
+          token: ${{ secrets.TOKEN_GITHUB_FOR_GITHUB_ACTION }}
+
+      - name: 'Calculate the new version'
+        id: calculate-version
+        env:
+          BUMP_TYPE: ${{ inputs.bumpType }}
+        run: |
+          set -euo pipefail
+
+          # Dernier tag semver existant, 0.0.0 si le dépôt n'en a aucun
+          latestTag=$(git tag --list --sort=-v:refname | grep -m 1 -E '^[0-9]+\.[0-9]+\.[0-9]+$' || echo '0.0.0')
+          IFS='.' read -r major minor patch <<< "$latestTag"
+
+          case "$BUMP_TYPE" in
+            major) major=$((major + 1)); minor=0; patch=0 ;;
+            minor) minor=$((minor + 1)); patch=0 ;;
+            patch) patch=$((patch + 1)) ;;
+            *) echo "::error::Type de version inconnu : '$BUMP_TYPE' (attendu : major, minor ou patch)"; exit 1 ;;
+          esac
+
+          releaseVersion="$major.$minor.$patch"
+          # Version de développement posée sur develop juste après la release
+          snapshotVersion="$major.$minor.$((patch + 1))-SNAPSHOT"
+          echo "releaseVersion=$releaseVersion" >> "$GITHUB_OUTPUT"
+          echo "snapshotVersion=$snapshotVersion" >> "$GITHUB_OUTPUT"
+          echo "::notice::$latestTag -> $releaseVersion ($BUMP_TYPE), develop -> $snapshotVersion"
+
+      - name: 'Verify version is not already used as a git tag'
+        env:
+          NEW_TAG:  ${{ steps.calculate-version.outputs.releaseVersion }}
+        run: |
+          if git rev-parse -q --verify "refs/tags/$NEW_TAG" > /dev/null; then
+            echo "::error::Tag $NEW_TAG already exists"
+            exit 1
+          fi
+
+      - name: 'Generate the new version (pom.xml + git tag + snapshot on develop)'
+        env:
+          RELEASE_BRANCH: ${{ github.ref_name }}
+          NEW_VERSION: ${{ steps.calculate-version.outputs.releaseVersion }}
+          NEW_SNAPSHOT_VERSION: ${{ steps.calculate-version.outputs.snapshotVersion }}
+          DRY_RUN: ${{ inputs.dryRun }}
+        run: |
+          set -euo pipefail
+
+          # Remplace <project><version> du pom.xml (et pas celle du <parent>)
+          set_pom_version() {
+            printf 'setns x=http://maven.apache.org/POM/4.0.0\ncd /x:project/x:version\nset %s\nsave\n' "$1" \
+              | xmllint --shell pom.xml > /dev/null
+            grep -q "<version>$1</version>" pom.xml || { echo "::error::pom.xml non mis à jour en $1"; exit 1; }
+          }
+
+          git config --global user.email "github-action@noreply"
+          git config --global user.name "Github Action"
+          if ! command -v xmllint > /dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq libxml2-utils
+          fi
+
+          # 1. Commit de release sur main/master, puis tag sur ce commit même.
+          #    Pas de [skip ci] ici : GitHub l'appliquerait aussi au push du tag,
+          #    et l'image docker X.Y.Z ne serait jamais construite.
+          set_pom_version "$NEW_VERSION"
+          git commit -am "Version $NEW_VERSION"
+          git tag -a "$NEW_VERSION" -m "Version $NEW_VERSION"
+
+          # 2. Report de la release sur develop, puis passage à la version snapshot suivante.
+          #    Tout est fait en local avant le moindre push : un conflit arrête le job
+          #    sans avoir rien publié.
+          git switch develop
+          if ! git merge --no-ff "$RELEASE_BRANCH" -m "Merge $RELEASE_BRANCH ($NEW_VERSION) into develop"; then
+            echo "::error::Conflit en fusionnant $RELEASE_BRANCH dans develop, rien n'a été poussé. Fusionner à la main puis relancer."
+            git merge --abort
+            exit 1
+          fi
+          set_pom_version "$NEW_SNAPSHOT_VERSION"
+          # [skip ci] porte sur le dernier commit poussé sur develop : évite un build inutile
+          git commit -am "Version $NEW_SNAPSHOT_VERSION [skip ci]"
+
+          git log --oneline --graph -n 6 "$RELEASE_BRANCH" develop
+
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "::notice::Dry run : $NEW_VERSION et $NEW_SNAPSHOT_VERSION préparés localement, rien n'est poussé"
+            exit 0
+          fi
+
+          # 3. Publication en une seule opération : branche de release, tag et develop
+          #    sont poussés ensemble, ou pas du tout.
+          git push --atomic origin "$RELEASE_BRANCH" develop "refs/tags/$NEW_VERSION"
+
+
+      - name: 'Create the github release'
+        if: ${{ !inputs.dryRun }}
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.calculate-version.outputs.releaseVersion }}
+          generate_release_notes: true
+          token: ${{ secrets.TOKEN_GITHUB_FOR_GITHUB_ACTION }}

@@ -81,7 +81,7 @@ public class ANRWriter implements ItemWriter<ANRMatchDTO> {
                     StandardOpenOption.CREATE, StandardOpenOption.APPEND)) {
                 // Écrire l'en-tête seulement si le fichier est nouveau
                 if (!fileExists) {
-                    writer.write("file_path,file_name,page_number,match_value,context_before,context_after,pages_analyzed,total_pages,processing_time,error_message,nnt,doi,defense_date\n");
+                    writer.write("file_path,file_name,page_number,match_value,preceding_context,following_context,analyzed_pages_number,total_pages,processing_time,error_message,nnt,doi,defense_date\n");
                 }
 
                 for (ANRMatchDTO item : yearItems) {

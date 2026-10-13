@@ -31,9 +31,9 @@ public class JsonWriter implements ANRFormatWriter {
         FILE_NAME("file_name", true, item -> item.fileName(), (item, page) -> item.fileName()),
         PAGE_NUMBER("page_number", false, item -> 0, (item, page) -> page.pageNumber()),
         MATCH_VALUE("match_value", true, item -> "", (item, page) -> page.matchValue()),
-        CONTEXT_BEFORE("context_before", true, item -> "", (item, page) -> page.contextBefore()),
-        CONTEXT_AFTER("context_after", true, item -> "", (item, page) -> page.contextAfter()),
-        PAGES_ANALYZED("pages_analyzed", false, item -> item.pagesAnalyzed(), (item, page) -> item.pagesAnalyzed()),
+        PRECEDING_CONTEXT("preceding_context", true, item -> "", (item, page) -> page.contextBefore()),
+        FOLLOWING_CONTEXT("following_context", true, item -> "", (item, page) -> page.contextAfter()),
+        ANALYZED_PAGES_NUMBER("analyzed_pages_number", false, item -> item.pagesAnalyzed(), (item, page) -> item.pagesAnalyzed()),
         TOTAL_PAGES("total_pages", false, item -> item.totalPages(), (item, page) -> item.totalPages()),
         PROCESSING_TIME("processing_time", false, item -> item.processingTime(), (item, page) -> item.processingTime()),
         ERROR_MESSAGE("error_message", true, item -> item.errorMessage() != null ? item.errorMessage() : "", (item, page) -> ""),
@@ -91,7 +91,7 @@ public class JsonWriter implements ANRFormatWriter {
     public JsonWriter(
             @Value("${app.anr.output-dir:'/output'}") String outputDir,
             @Value("${app.anr.json.pretty-print:true}") boolean prettyPrint,
-            @Value("${app.anr.writers.header:file_path,file_name,page_number,match_value,context_before,context_after,pages_analyzed,total_pages,processing_time,error_message,nnt,doi,defense_date}") String jsonHeader) {
+            @Value("${app.anr.writers.header:file_path,file_name,page_number,match_value,preceding_context,following_context,analyzed_pages_number,total_pages,processing_time,error_message,nnt,doi,defense_date}") String jsonHeader) {
         this.outputDir = outputDir;
         this.prettyPrint = prettyPrint;
         this.jsonHeader = jsonHeader;

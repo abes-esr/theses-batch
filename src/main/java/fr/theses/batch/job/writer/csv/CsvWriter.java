@@ -33,9 +33,9 @@ public class CsvWriter implements ANRFormatWriter {
         FILE_NAME("file_name", true, item -> item.fileName(), (item, page) -> item.fileName()),
         PAGE_NUMBER("page_number", false, item -> "", (item, page) -> String.valueOf(page.pageNumber())),
         MATCH_VALUE("match_value", true, item -> "", (item, page) -> page.matchValue()),
-        CONTEXT_BEFORE("context_before", true, item -> "", (item, page) -> page.contextBefore()),
-        CONTEXT_AFTER("context_after", true, item -> "", (item, page) -> page.contextAfter()),
-        PAGES_ANALYZED("pages_analyzed", false, item -> String.valueOf(item.pagesAnalyzed()), (item, page) -> String.valueOf(item.pagesAnalyzed())),
+        PRECEDING_CONTEXT("preceding_context", true, item -> "", (item, page) -> page.contextBefore()),
+        FOLLOWING_CONTEXT("following_context", true, item -> "", (item, page) -> page.contextAfter()),
+        ANALYZED_PAGES_NUMBER("analyzed_pages_number", false, item -> String.valueOf(item.pagesAnalyzed()), (item, page) -> String.valueOf(item.pagesAnalyzed())),
         TOTAL_PAGES("total_pages", false, item -> String.valueOf(item.totalPages()), (item, page) -> String.valueOf(item.totalPages())),
         PROCESSING_TIME("processing_time", false, item -> String.format(Locale.US, "%.3f", item.processingTime()), (item, page) -> String.format(Locale.US, "%.3f", item.processingTime())),
         ERROR_MESSAGE("error_message", true, item -> item.errorMessage() != null ? item.errorMessage() : "", (item, page) -> ""),
@@ -94,7 +94,7 @@ public class CsvWriter implements ANRFormatWriter {
 
     public CsvWriter(
             @Value("${app.anr.output-dir:'/output'}") String outputDir,
-            @Value("${app.anr.writers.header:file_path,file_name,page_number,match_value,context_before,context_after,pages_analyzed,total_pages,processing_time,error_message,nnt,doi,defense_date}")
+            @Value("${app.anr.writers.header:file_path,file_name,page_number,match_value,preceding_context,following_context,analyzed_pages_number,total_pages,processing_time,error_message,nnt,doi,defense_date}")
             String csvHeader) {
         this.outputDir = outputDir;
         this.csvHeader = csvHeader;

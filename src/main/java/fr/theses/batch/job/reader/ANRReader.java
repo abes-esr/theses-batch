@@ -32,7 +32,7 @@ import java.util.stream.Stream;
 public class ANRReader implements ItemReader<ANRMatchDTO> {
 
     private final ANRSearchService anrSearchService;
-    private final String rootDir;
+    private final String inputDir;
     private final List<String> excludeKeywords;
     
     private Iterator<File> fileIterator;
@@ -42,17 +42,17 @@ public class ANRReader implements ItemReader<ANRMatchDTO> {
     
     @Autowired
     public ANRReader(ANRSearchService anrSearchService,
-                     @Value("${app.anr.root-dir}") String rootDir,
+                     @Value("${app.anr.input-dir}") String inputDir,
                      @Value("${app.anr.exclude-keywords}") String excludeKeywords,
                      @Value("${app.anr.max-files:10000}") int maxFiles,
                      @Value("${app.anr.offset:0}") int offset) {
         this.anrSearchService = anrSearchService;
-        this.rootDir = rootDir;
+        this.inputDir = inputDir;
         this.excludeKeywords = Arrays.asList(excludeKeywords.split(","));
         this.maxFiles = maxFiles;
         this.offset = offset;
         
-        log.info("Initialisation ANRReader avec rootDir={}, maxFiles={}, offset={}", rootDir, maxFiles, offset);
+        log.info("Initialisation ANRReader avec inputDir={}, maxFiles={}, offset={}", inputDir, maxFiles, offset);
         initializeFileIterator();
     }
     
@@ -85,10 +85,10 @@ public class ANRReader implements ItemReader<ANRMatchDTO> {
     private List<File> findAllPdfFiles() throws IOException {
         List<File> pdfFiles = new ArrayList<>();
         
-        Path rootPath = Path.of(rootDir);
+        Path rootPath = Path.of(inputDir);
         if (!Files.exists(rootPath)) {
-            log.error("Le répertoire racine n'existe pas : {}", rootDir);
-            throw new IOException("Root directory does not exist: " + rootDir);
+            log.error("Le répertoire racine n'existe pas : {}", inputDir);
+            throw new IOException("Input directory does not exist: " + inputDir);
         }
         
         try (Stream<Path> paths = Files.walk(rootPath)) {

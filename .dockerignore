@@ -28,5 +28,4 @@ docs/
 
 # Docker
 Dockerfile
-docker/
 .dockerignore

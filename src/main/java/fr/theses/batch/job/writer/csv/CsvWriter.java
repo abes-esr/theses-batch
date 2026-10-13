@@ -37,7 +37,7 @@ public class CsvWriter implements ANRFormatWriter {
         CONTEXT_AFTER("context_after", true, item -> "", (item, page) -> page.contextAfter()),
         PAGES_ANALYZED("pages_analyzed", false, item -> String.valueOf(item.pagesAnalyzed()), (item, page) -> String.valueOf(item.pagesAnalyzed())),
         TOTAL_PAGES("total_pages", false, item -> String.valueOf(item.totalPages()), (item, page) -> String.valueOf(item.totalPages())),
-        PROCESSING_TIME("processing_time", false, item -> String.format("%.2f", item.processingTime()), (item, page) -> String.format("%.2f", item.processingTime())),
+        PROCESSING_TIME("processing_time", false, item -> String.format(Locale.US, "%.3f", item.processingTime()), (item, page) -> String.format(Locale.US, "%.3f", item.processingTime())),
         ERROR_MESSAGE("error_message", true, item -> item.errorMessage() != null ? item.errorMessage() : "", (item, page) -> ""),
         NNT("nnt", true, item -> item.nnt() != null ? item.nnt() : "", (item, page) -> item.nnt() != null ? item.nnt() : ""),
         DOI("doi", true, item -> item.doi() != null ? item.doi() : "", (item, page) -> item.doi() != null ? item.doi() : ""),

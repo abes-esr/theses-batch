@@ -133,7 +133,6 @@ jobs:
           #    sont poussés ensemble, ou pas du tout.
           git push --atomic origin "$RELEASE_BRANCH" develop "refs/tags/$NEW_VERSION"
 
-
       - name: 'Create the github release'
         if: ${{ !inputs.dryRun }}
         uses: softprops/action-gh-release@v3

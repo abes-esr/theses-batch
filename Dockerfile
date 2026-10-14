@@ -46,4 +46,4 @@ COPY ./docker/batch/docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
-CMD ["/scripts/theses-batch.sh"]
+CMD ["tail", "-f", "/dev/null"]

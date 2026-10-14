@@ -32,6 +32,18 @@
              fichier et masquerait toute modification faite ci-dessous.
              Pour un run ponctuel, passer la propriete logging.level.fr.theses.batch
              en argument de ligne de commande. -->
+
+        <!-- PDFBox / FontBox émettent un avertissement par glyphe sans correspondance
+             Unicode, souvent des centaines par PDF. Pendant le traitement d'un fichier,
+             PdfWarningFilter les compte au lieu de les écrire, et ANRProcessor
+             journalise un récapitulatif par type pour ce fichier. -->
+        <Logger name="org.apache.pdfbox" level="WARN">
+            <PdfWarningFilter/>
+        </Logger>
+        <Logger name="org.apache.fontbox" level="WARN">
+            <PdfWarningFilter/>
+        </Logger>
+
         <Root level="INFO">
             <AppenderRef ref="Console"/>
             <AppenderRef ref="BatchFile"/>

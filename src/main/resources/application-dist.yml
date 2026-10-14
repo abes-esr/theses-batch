@@ -11,15 +11,14 @@ spring:
 app:
   anr:
     pattern: ${THESES_BATCH_ANR_PATTERN}
-    input-dir: ./input
-    output-dir: ./output
+    input-dir: /input
+    output-dir: /output
     max-files: ${THESES_BATCH_ANR_MAX_FILES}
     offset: ${THESES_BATCH_ANR_OFFSET}
     nb-pages: ${THESES_BATCH_ANR_NB_PAGES}
     context-characters: ${THESES_BATCH_ANR_CONTEXT_CHARACTERS}
     chunk-size: ${THESES_BATCH_ANR_CHUNK_SIZE}
     exclude-keywords: ${THESES_BATCH_ANR_EXCLUDE_KEYWORDS}
-    # Configuration des writers
     writers:
       enabled: ${THESES_BATCH_ANR_WRITERS_ENABLED}
       header: ${THESES_BATCH_ANR_WRITERS_HEADER}

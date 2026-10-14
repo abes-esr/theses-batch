@@ -1,9 +1,9 @@
 package fr.theses.batch.job.writer.json;
 
 import fr.theses.batch.business.anr.model.dto.ANRMatchDTO;
-import fr.theses.batch.job.writer.ANRFormatWriter;
 import fr.theses.batch.job.writer.ANRResultRows;
 import org.springframework.batch.infrastructure.item.Chunk;
+import org.springframework.batch.infrastructure.item.ItemWriter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.ObjectMapper;
@@ -17,7 +17,7 @@ import java.util.*;
  * Les champs et les lignes viennent d'ANRResultRows ; ce writer ne fait que les sérialiser en JSON
  */
 @Component
-public class ANRJsonWriter implements ANRFormatWriter {
+public class ANRJsonWriter implements ItemWriter<ANRMatchDTO> {
 
     private final ANRResultRows resultRows;
     private final ObjectMapper objectMapper;
@@ -39,13 +39,8 @@ public class ANRJsonWriter implements ANRFormatWriter {
     }
 
     @Override
-    public void write(Chunk<? extends ANRMatchDTO> chunk) throws Exception {
-        write(chunk.getItems());
-    }
-
-    @Override
-    public void write(List<? extends ANRMatchDTO> items) throws IOException {
-        for (Map.Entry<String, List<ANRMatchDTO>> entry : resultRows.groupByYear(items).entrySet()) {
+    public void write(Chunk<? extends ANRMatchDTO> chunk) throws IOException {
+        for (Map.Entry<String, List<ANRMatchDTO>> entry : resultRows.groupByYear(chunk.getItems()).entrySet()) {
             String year = entry.getKey();
             // Fichier commun à tout le run, réécrit avec l'ensemble des résultats cumulés
             Path jsonFilePath = resultRows.resultFile(year, "json");

@@ -2,6 +2,7 @@ package fr.theses.batch.job.writer.csv;
 
 import fr.theses.batch.business.anr.model.dto.ANRMatchDTO;
 import fr.theses.batch.business.anr.model.dto.ANRPageMatchDTO;
+import fr.theses.batch.job.RunTimestamp;
 import fr.theses.batch.job.writer.ANRFormatWriter;
 import org.springframework.batch.infrastructure.item.Chunk;
 import org.springframework.beans.factory.annotation.Value;
@@ -12,8 +13,6 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -81,21 +80,21 @@ public class CsvWriter implements ANRFormatWriter {
         }
     }
 
-    private static final DateTimeFormatter TIMESTAMP_FORMATTER =
-            DateTimeFormatter.ofPattern("yyyy-MM-dd-HH-mm-ss");
-
     private static final String QUOTE = "\"";
     private static final String COMMA = ",";
     private static final String NEWLINE = "\n";
 
     private final String outputDir;
+    private final String runTimestamp;
     private final String csvHeader;
     private final List<CsvField> configuredFields;
 
     public CsvWriter(
+            RunTimestamp runTimestamp,
             @Value("${app.anr.output-dir:'/output'}") String outputDir,
             @Value("${app.anr.writers.header:file_path,file_name,page_number,match_value,preceding_context,following_context,analyzed_pages_number,total_pages,processing_time,error_message,nnt,doi,defense_date}")
             String csvHeader) {
+        this.runTimestamp = runTimestamp.value();
         this.outputDir = outputDir;
         this.csvHeader = csvHeader;
         this.configuredFields = parseHeader(csvHeader);
@@ -121,8 +120,6 @@ public class CsvWriter implements ANRFormatWriter {
 
     @Override
     public void write(List<? extends ANRMatchDTO> items) throws IOException {
-        String timestamp = LocalDateTime.now().format(TIMESTAMP_FORMATTER);
-
         // Grouper les items par année de soutenance
         Map<String, List<ANRMatchDTO>> itemsByYear = items.stream()
                 .collect(Collectors.groupingBy(this::extractYear));
@@ -131,7 +128,8 @@ public class CsvWriter implements ANRFormatWriter {
         for (Map.Entry<String, List<ANRMatchDTO>> entry : itemsByYear.entrySet()) {
             String year = entry.getKey();
             List<ANRMatchDTO> yearItems = entry.getValue();
-            Path csvFilePath = Path.of(outputDir, timestamp + "_anr_results_" + year + ".csv");
+            // Un seul fichier par année pour tout le run : les chunks suivants y sont ajoutés
+            Path csvFilePath = Path.of(outputDir, runTimestamp + "_anr_results_" + year + ".csv");
 
             if (!Files.exists(csvFilePath.getParent())) {
                 Files.createDirectories(csvFilePath.getParent());

@@ -3,6 +3,7 @@ package fr.theses.batch.job.processor;
 import fr.theses.batch.business.anr.model.dto.ANRMatchDTO;
 import fr.theses.batch.business.anr.model.dto.ANRPageMatchDTO;
 import fr.theses.batch.util.log.PdfWarningCollector;
+import fr.theses.batch.util.parser.PDFExtraction;
 import fr.theses.batch.util.parser.PDFTextExtractor;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
@@ -16,6 +17,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -53,18 +55,20 @@ public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
     public ANRMatchDTO process(ANRMatchDTO item) throws Exception {
         Instant startTime = Instant.now();
         PdfWarningCollector.start();
+        PDFExtraction extraction = null;
 
         try {
             String filePath = item.filePath();
 
             // Lire les pages du PDF
-            List<PDFTextExtractor.PDFPage> pages = pdfTextExtractor.extractTextFromPdf(filePath, maxPages);
+            extraction = pdfTextExtractor.extractTextFromPdf(filePath, maxPages);
+            List<PDFTextExtractor.PDFPage> pages = extraction.pages();
 
             List<ANRPageMatchDTO> pageMatches = new ArrayList<>();
 
             // Traiter chaque page
             for (PDFTextExtractor.PDFPage page : pages) {
-                String text = page.getText();
+                String text = page.text();
                 if (text == null || text.isEmpty()) {
                     continue;
                 }
@@ -80,7 +84,7 @@ public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
                     String contextBefore = extractContext(text, start, contextCharacters, true);
                     String contextAfter = extractContext(text, end, contextCharacters, false);
 
-                    ANRPageMatchDTO pageMatch = new ANRPageMatchDTO(page.getPageNumber(), matchValue, contextBefore, contextAfter);
+                    ANRPageMatchDTO pageMatch = new ANRPageMatchDTO(page.pageNumber(),matchValue, contextBefore, contextAfter);
                     pageMatches.add(pageMatch);
                 }
             }
@@ -97,7 +101,7 @@ public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
             return item
                     .withPageMatches(pageMatches)
                     .withPagesAnalyzed(pages.size())
-                    .withTotalPages(pdfTextExtractor.getPageCount(filePath))
+                    .withTotalPages(extraction.totalPages())
                     .withProcessingTime(processingDuration.toMillis() / 1000.0);
 
         } catch (IOException e) {
@@ -106,7 +110,7 @@ public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
                     .withProcessingTime(processingDuration.toMillis() / 1000.0)
                     .withErrorMessage("Erreur lors du traitement du fichier: " + e.getMessage());
         } finally {
-            logPdfWarnings(relativeToInputDir(item.filePath()));
+            logExtractionSummary(relativeToInputDir(item.filePath()), extraction);
         }
     }
 
@@ -122,24 +126,53 @@ public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
     }
 
     /**
-     * Journalise en un seul message les avertissements PDFBox / FontBox collectés pour ce fichier,
-     * regroupés par type et triés par nombre décroissant.
+     * Journalise en un seul message la qualité de l'extraction de ce fichier : part du texte perdu
+     * (glyphes sans caractère Unicode), part reconstituée via les polices système, et avertissements
+     * PDFBox / FontBox regroupés par type, triés par nombre décroissant.
+     * Rien n'est écrit si l'extraction est complète et sans avertissement ; un fichier dont le texte a été
+     * entièrement reconstitué est signalé en INFO.
      *
-     * @param fileName Nom du fichier traité
+     * @param relativePath Chemin du fichier relatif à app.anr.input-dir
+     * @param extraction   Résultat de l'extraction, null si le fichier n'a pas pu être lu
      */
-    private void logPdfWarnings(String relativePath) {
+    private void logExtractionSummary(String relativePath, PDFExtraction extraction) {
         Map<String, Integer> warnings = PdfWarningCollector.stop();
-        if (warnings.isEmpty()) {
+        boolean lost = extraction != null && extraction.lostGlyphs() > 0;
+        boolean recovered = extraction != null && extraction.recoveredGlyphs() > 0;
+        if (warnings.isEmpty() && !lost && !recovered) {
             return;
         }
 
-        int total = warnings.values().stream().mapToInt(Integer::intValue).sum();
-        StringBuilder detail = new StringBuilder();
-        warnings.entrySet().stream()
-                .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
-                .forEach(e -> detail.append(String.format("%n    %5d x %s", e.getValue(), e.getKey())));
+        StringBuilder message = new StringBuilder(relativePath);
+        if (extraction != null) {
+            message.append(String.format(Locale.FRANCE, " : texte perdu %s (%d/%d glyphes)",
+                    formatPercent(extraction.lostPercent()), extraction.lostGlyphs(), extraction.glyphs()));
+        }
+        if (recovered) {
+            message.append(", reconstitué ").append(formatPercent(extraction.recoveredPercent()))
+                    .append(" via les polices système");
+        }
+        if (!warnings.isEmpty()) {
+            int total = warnings.values().stream().mapToInt(Integer::intValue).sum();
+            message.append(", ").append(total).append(" avertissement(s) PDFBox :");
+            warnings.entrySet().stream()
+                    .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
+                    .forEach(e -> message.append(String.format("%n    %5d x %s", e.getValue(), e.getKey())));
+        }
 
-        log.warn("{} avertissement(s) PDFBox pour {} :{}", total, relativePath, detail);
+        if (lost || !warnings.isEmpty()) {
+            log.warn("{}", message);
+        } else {
+            log.info("{}", message);
+        }
+    }
+
+    /**
+     * Pourcentage à une décimale ; une part non nulle mais inférieure à 0,1 % s'affiche « < 0,1 % »
+     * plutôt que « 0,0 % ».
+     */
+    private static String formatPercent(double percent) {
+        return percent > 0 && percent < 0.05 ? "< 0,1 %" : String.format(Locale.FRANCE, "%.1f %%", percent);
     }
 
     /**

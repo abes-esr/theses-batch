@@ -43,6 +43,10 @@
         <Logger name="org.apache.fontbox" level="WARN">
             <PdfWarningFilter/>
         </Logger>
+        <!-- « Format 14 cmap table is not supported » : table des variantes de glyphes,
+             sans effet sur l'extraction ; émis surtout au chargement des polices système
+             (app.anr.fonts-dir). -->
+        <Logger name="org.apache.fontbox.ttf.CmapSubtable" level="ERROR"/>
 
         <Root level="INFO">
             <AppenderRef ref="Console"/>

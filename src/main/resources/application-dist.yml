@@ -19,6 +19,10 @@ app:
     context-characters: ${THESES_BATCH_ANR_CONTEXT_CHARACTERS}
     chunk-size: ${THESES_BATCH_ANR_CHUNK_SIZE}
     exclude-keywords: ${THESES_BATCH_ANR_EXCLUDE_KEYWORDS}
+    # Polices TrueType (.ttf / .ttc) servant à reconstituer le texte des PDF dont les polices
+    # n'ont pas de correspondance Unicode (PDF Word : Times New Roman, Arial, Calibri...).
+    # Vide = désactivé. Windows : C:/Windows/Fonts ; Linux : /usr/share/fonts
+    fonts-dir: ${THESES_BATCH_ANR_FONTS_DIR:}
     # Configuration des writers
     writers:
       enabled: ${THESES_BATCH_ANR_WRITERS_ENABLED}

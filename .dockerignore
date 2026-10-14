@@ -29,3 +29,6 @@ docs/
 # Docker
 Dockerfile
 .dockerignore
+
+# Environment
+application.yml

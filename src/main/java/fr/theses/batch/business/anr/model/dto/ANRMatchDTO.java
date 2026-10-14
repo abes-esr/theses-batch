@@ -22,11 +22,6 @@ public record ANRMatchDTO(
     String fileName,
     
     /**
-     * Liste des correspondances ANR trouvées (pour compatibilité)
-     */
-    List<String> matches,
-    
-    /**
      * Liste des correspondances avec numéro de page et contexte
      */
     List<ANRPageMatchDTO> pageMatches,
@@ -67,7 +62,6 @@ public record ANRMatchDTO(
     LocalDate defenseDate
 ) {
     public ANRMatchDTO {
-        matches = matches != null ? new ArrayList<>(matches) : new ArrayList<>();
         pageMatches = pageMatches != null ? new ArrayList<>(pageMatches) : new ArrayList<>();
     }
 }

@@ -1,0 +1,7 @@
+# Scripts exécutés sous Linux (image Docker, wrapper Maven) : toujours en LF,
+# même sur un poste Windows avec core.autocrlf=true, sinon « /bin/bash^M: bad interpreter »
+*.sh text eol=lf
+mvnw text eol=lf
+
+# Scripts Windows
+*.cmd text eol=crlf

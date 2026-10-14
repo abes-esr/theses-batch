@@ -6,5 +6,12 @@
 # guillemets pour conserver les espaces.
 env | sed 's/^\([^=]*\)=\(.*\)$/\1="\2"/' > /etc/environment
 
-# Exécute la commande passée en CMD
-exec "$@"
+# Si le conteneur est démarré avec "batch" ou RUN_BATCH=true, lancer le batch
+if [[ "$1" == "batch" ]] || [[ "${RUN_BATCH}" == "true" ]]; then
+    exec /scripts/theses-batch.sh "${@:2}"
+else
+    # Sinon, garder le conteneur actif pour debug/exec
+    echo "Theses batch container ready."
+    echo "Use 'docker exec <container> /scripts/theses-batch.sh' to start the batch."
+    exec tail -f /dev/null
+fi

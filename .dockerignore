@@ -31,4 +31,4 @@ Dockerfile
 .dockerignore
 
 # Environment
-application.yml
+**/application.yml

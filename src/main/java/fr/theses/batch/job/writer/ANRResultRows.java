@@ -26,7 +26,7 @@ public class ANRResultRows {
 
     public ANRResultRows(
             RunTimestamp runTimestamp,
-            @Value("${app.anr.output-dir:'/output'}") String outputDir,
+            @Value("${app.anr.output-dir:output}") String outputDir,
             @Value("${app.anr.writers.header:file_path,file_name,page_number,match_value,preceding_context,following_context,analyzed_pages_number,total_pages,processing_time,error_message,nnt,doi,defense_date}")
             String header) {
         this.runTimestamp = runTimestamp.value();

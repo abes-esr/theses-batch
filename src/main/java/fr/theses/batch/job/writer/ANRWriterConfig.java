@@ -1,8 +1,8 @@
 package fr.theses.batch.job.writer;
 
 import fr.theses.batch.business.anr.model.dto.ANRMatchDTO;
-import fr.theses.batch.job.writer.csv.CsvWriter;
-import fr.theses.batch.job.writer.json.JsonWriter;
+import fr.theses.batch.job.writer.csv.ANRCsvWriter;
+import fr.theses.batch.job.writer.json.ANRJsonWriter;
 import org.springframework.batch.infrastructure.item.ItemWriter;
 import org.springframework.batch.infrastructure.item.support.CompositeItemWriter;
 import org.springframework.beans.factory.annotation.Value;
@@ -31,8 +31,8 @@ public class ANRWriterConfig {
      */
     @Bean
     public CompositeItemWriter<ANRMatchDTO> anrCompositeWriter(
-            CsvWriter csvWriter,
-            JsonWriter jsonWriter,
+            ANRCsvWriter anrCsvWriter,
+            ANRJsonWriter anrJsonWriter,
             @Value("${app.anr.writers.enabled:csv,json}") String[] enabledWriters) {
 
         Set<String> formats = new LinkedHashSet<>();
@@ -48,8 +48,8 @@ public class ANRWriterConfig {
         List<ItemWriter<? super ANRMatchDTO>> delegates = new ArrayList<>();
         for (String format : formats) {
             delegates.add(switch (format) {
-                case "csv" -> csvWriter;
-                case "json" -> jsonWriter;
+                case "csv" -> anrCsvWriter;
+                case "json" -> anrJsonWriter;
                 default -> throw new IllegalArgumentException(
                         "Unknown writer in app.anr.writers.enabled: '" + format + "' (expected: csv, json)");
             });

@@ -22,7 +22,7 @@ import java.util.stream.Collectors;
  * Les colonnes et les lignes viennent d'ANRResultRows ; ce writer ne fait que les sérialiser en CSV
  */
 @Component
-public class CsvWriter implements ANRFormatWriter {
+public class ANRCsvWriter implements ANRFormatWriter {
 
     private static final String QUOTE = "\"";
     private static final String SEPARATOR = ",";
@@ -30,7 +30,7 @@ public class CsvWriter implements ANRFormatWriter {
 
     private final ANRResultRows resultRows;
 
-    public CsvWriter(ANRResultRows resultRows) {
+    public ANRCsvWriter(ANRResultRows resultRows) {
         this.resultRows = resultRows;
     }
 

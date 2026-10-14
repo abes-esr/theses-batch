@@ -7,10 +7,11 @@ import org.springframework.batch.infrastructure.item.Chunk;
 import org.springframework.stereotype.Component;
 
 import java.io.BufferedWriter;
-import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -44,7 +45,9 @@ public class CsvWriter implements ANRFormatWriter {
             // Fichier commun à tout le run : les chunks suivants y sont ajoutés
             Path csvFilePath = resultRows.resultFile(entry.getKey(), "csv");
 
-            try (BufferedWriter writer = new BufferedWriter(new FileWriter(csvFilePath.toFile(), true))) {
+            // UTF-8 explicite : ne pas dépendre du charset par défaut de la JVM qui exécute le batch
+            try (BufferedWriter writer = Files.newBufferedWriter(csvFilePath, StandardCharsets.UTF_8,
+                    StandardOpenOption.CREATE, StandardOpenOption.APPEND)) {
                 if (Files.size(csvFilePath) == 0) {
                     writer.write(String.join(SEPARATOR, resultRows.fieldNames()) + NEWLINE);
                 }

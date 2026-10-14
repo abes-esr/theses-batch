@@ -42,8 +42,8 @@ public class ANRReader implements ItemReader<ANRMatchDTO> {
     
     @Autowired
     public ANRReader(ANRSearchService anrSearchService,
-                     @Value("${app.anr.input-dir}") String inputDir,
-                     @Value("${app.anr.exclude-keywords}") String excludeKeywords,
+                     @Value("${app.anr.input-dir:/input}") String inputDir,
+                     @Value("${app.anr.exclude-keywords:}") String excludeKeywords,
                      @Value("${app.anr.max-files:10000}") int maxFiles,
                      @Value("${app.anr.offset:0}") int offset) {
         this.anrSearchService = anrSearchService;

@@ -35,7 +35,7 @@ public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
     private String anrPatternSource;
     @Value("${app.anr.context-characters:50}")
     private int contextCharacters;
-    @Value("${app.anr.input-dir}")
+    @Value("${app.anr.input-dir:/input}")
     private String inputDir;
     private final PDFTextExtractor pdfTextExtractor;
     private Pattern anrPattern;

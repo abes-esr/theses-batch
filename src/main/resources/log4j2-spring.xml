@@ -5,8 +5,10 @@
   Le suffixe "-spring" du nom de fichier est requis : c'est lui qui autorise
   le lookup ${spring:...}, résolu sur l'Environment Spring Boot.
 
-  ${date:...} est évalué une seule fois, au chargement de la configuration,
-  donc chaque exécution du batch écrit dans son propre fichier horodaté.
+  Le fichier de log porte l'horodatage du run (propriété système app.run.timestamp,
+  fixée par RunTimestamp.initialize() dans main), le même que les fichiers de
+  résultats. ${date:...} n'est qu'un repli si l'application démarre sans passer
+  par main ; il est évalué une seule fois, au chargement de la configuration.
 -->
 <Configuration status="WARN">
 
@@ -19,7 +21,7 @@
         <Console name="Console" target="SYSTEM_OUT">
             <PatternLayout pattern="${logPattern}"/>
         </Console>
-        <File name="BatchFile" fileName="${outputDir}/${date:yyyy-MM-dd-HH-mm-ss}_batch.log">
+        <File name="BatchFile" fileName="${outputDir}/${sys:app.run.timestamp:-${date:yyyy-MM-dd-HH-mm-ss}}_batch.log">
             <PatternLayout pattern="${logPattern}"/>
         </File>
     </Appenders>

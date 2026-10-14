@@ -85,13 +85,13 @@ public class ANRReader implements ItemReader<ANRMatchDTO> {
     private List<File> findAllPdfFiles() throws IOException {
         List<File> pdfFiles = new ArrayList<>();
         
-        Path rootPath = Path.of(inputDir);
-        if (!Files.exists(rootPath)) {
-            log.error("Le répertoire racine n'existe pas : {}", inputDir);
+        Path inputPath = Path.of(inputDir);
+        if (!Files.exists(inputPath)) {
+            log.error("Le répertoire d'entrée (app.anr.input-dir) n'existe pas : {}", inputDir);
             throw new IOException("Input directory does not exist: " + inputDir);
         }
         
-        try (Stream<Path> paths = Files.walk(rootPath)) {
+        try (Stream<Path> paths = Files.walk(inputPath)) {
             paths.filter(Files::isRegularFile)
                 .filter(path -> path.toString().toLowerCase().endsWith(".pdf"))
                 .map(Path::toFile)

@@ -11,8 +11,8 @@ spring:
 app:
   anr:
     pattern: ${THESES_BATCH_ANR_PATTERN}
-    input-dir: ./input
-    output-dir: ./output
+    input-dir: /input
+    output-dir: /output
     max-files: ${THESES_BATCH_ANR_MAX_FILES}
     offset: ${THESES_BATCH_ANR_OFFSET}
     nb-pages: ${THESES_BATCH_ANR_NB_PAGES}

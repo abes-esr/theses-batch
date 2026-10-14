@@ -2,9 +2,14 @@ package fr.theses.batch.job.processor;
 
 import fr.theses.batch.business.anr.model.dto.ANRMatchDTO;
 import fr.theses.batch.business.anr.model.dto.ANRPageMatchDTO;
+import fr.theses.batch.support.LogCapture;
 import fr.theses.batch.support.TestPdfs;
 import fr.theses.batch.util.log.PdfWarningCollector;
+import fr.theses.batch.util.parser.PDFExtraction;
 import fr.theses.batch.util.parser.PDFTextExtractor;
+import fr.theses.batch.util.parser.SystemFontIndex;
+import fr.theses.batch.util.parser.SystemFontUnicodeRecovery;
+import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -36,6 +41,26 @@ class ANRProcessorTest {
         return processor;
     }
 
+    /**
+     * Extracteur réel, sans polices système (app.anr.fonts-dir vide)
+     */
+    private static PDFTextExtractor realExtractor() {
+        return new PDFTextExtractor(new SystemFontUnicodeRecovery(new SystemFontIndex()));
+    }
+
+    /**
+     * Processor dont l'extracteur renvoie l'extraction donnée, quel que soit le fichier
+     */
+    private ANRProcessor processorReturning(PDFExtraction extraction) throws IOException {
+        PDFTextExtractor extractor = mock(PDFTextExtractor.class);
+        when(extractor.extractTextFromPdf(anyString(), anyInt())).thenReturn(extraction);
+        return processor(extractor, 50, 5);
+    }
+
+    private static PDFExtraction extraction(int glyphs, int lost, int recovered) {
+        return new PDFExtraction(List.of(new PDFTextExtractor.PDFPage(1, "ANR-20-ABCD")), 1, glyphs, lost, recovered);
+    }
+
     private static ANRMatchDTO item(Path file) {
         return new ANRMatchDTO(file.toString(), file.getFileName().toString(), null, 0, 0, 0.0, null, null, null, null);
     }
@@ -47,7 +72,7 @@ class ANRProcessorTest {
                 "Ce travail a ete finance par ANR-15-CE23-0001 et le Labex XYZ",
                 "");
 
-        ANRMatchDTO result = processor(new PDFTextExtractor(), 50, 10).process(item(pdf));
+        ANRMatchDTO result = processor(realExtractor(), 50, 10).process(item(pdf));
 
         assertThat(result).isNotNull();
         assertThat(result.pagesAnalyzed()).isEqualTo(3);
@@ -69,7 +94,7 @@ class ANRProcessorTest {
     void contexteTronqueEnDebutEtFinDeTexte() throws Exception {
         Path pdf = TestPdfs.create(inputDir.resolve("court.pdf"), "PIA");
 
-        ANRMatchDTO result = processor(new PDFTextExtractor(), 50, 100).process(item(pdf));
+        ANRMatchDTO result = processor(realExtractor(), 50, 100).process(item(pdf));
 
         ANRPageMatchDTO match = result.pageMatches().getFirst();
         assertThat(match.matchValue()).isEqualTo("PIA");
@@ -81,9 +106,9 @@ class ANRProcessorTest {
     void neLitQueNbPages() throws Exception {
         Path pdf = TestPdfs.create(inputDir.resolve("long.pdf"), "rien", "rien", "ANR-15-CE23-0001");
 
-        assertThat(processor(new PDFTextExtractor(), 2, 10).process(item(pdf))).isNull();
+        assertThat(processor(realExtractor(), 2, 10).process(item(pdf))).isNull();
 
-        ANRMatchDTO all = processor(new PDFTextExtractor(), 0, 10).process(item(pdf));
+        ANRMatchDTO all = processor(realExtractor(), 0, 10).process(item(pdf));
         assertThat(all.pageMatches()).singleElement()
                 .extracting(ANRPageMatchDTO::pageNumber).isEqualTo(3);
     }
@@ -92,14 +117,14 @@ class ANRProcessorTest {
     void sansCorrespondance_renvoieNullPourNePasEcrireDeLigne() throws Exception {
         Path pdf = TestPdfs.create(inputDir.resolve("vide.pdf"), "Aucun financement ici", "");
 
-        assertThat(processor(new PDFTextExtractor(), 50, 10).process(item(pdf))).isNull();
+        assertThat(processor(realExtractor(), 50, 10).process(item(pdf))).isNull();
     }
 
     @Test
     void erreurDeLecture_renseigneLeMessageSansLeverDException() throws Exception {
         Path absent = inputDir.resolve("absent.pdf");
 
-        ANRMatchDTO result = processor(new PDFTextExtractor(), 50, 10).process(item(absent));
+        ANRMatchDTO result = processor(realExtractor(), 50, 10).process(item(absent));
 
         assertThat(result.errorMessage()).startsWith("Erreur lors du traitement du fichier: File not found");
         assertThat(result.pageMatches()).isEmpty();
@@ -109,21 +134,19 @@ class ANRProcessorTest {
     void fichierHorsInputDir_estAccepte() throws Exception {
         Path ailleurs = inputDir.getParent().resolve("hors-input-" + System.nanoTime() + ".pdf");
 
-        ANRMatchDTO result = processor(new PDFTextExtractor(), 50, 10).process(item(ailleurs));
+        ANRMatchDTO result = processor(realExtractor(), 50, 10).process(item(ailleurs));
 
         assertThat(result.errorMessage()).isNotNull();
     }
 
     @Test
     void pageSansTexte_estIgnoree() throws Exception {
-        PDFTextExtractor extractor = mock(PDFTextExtractor.class);
-        when(extractor.extractTextFromPdf(anyString(), anyInt())).thenReturn(List.of(
+        PDFExtraction extraction = new PDFExtraction(List.of(
                 new PDFTextExtractor.PDFPage(1, null),
                 new PDFTextExtractor.PDFPage(2, ""),
-                new PDFTextExtractor.PDFPage(3, "ANR-20-ABCD")));
-        when(extractor.getPageCount(anyString())).thenReturn(7);
+                new PDFTextExtractor.PDFPage(3, "ANR-20-ABCD")), 7, 11, 0, 0);
 
-        ANRMatchDTO result = processor(extractor, 50, 5).process(item(inputDir.resolve("x.pdf")));
+        ANRMatchDTO result = processorReturning(extraction).process(item(inputDir.resolve("x.pdf")));
 
         assertThat(result.pagesAnalyzed()).isEqualTo(3);
         assertThat(result.totalPages()).isEqualTo(7);
@@ -132,7 +155,48 @@ class ANRProcessorTest {
     }
 
     @Test
-    void avertissementsPdfBox_collectesPuisCollecteFermee() throws Exception {
+    void extractionCompleteSansAvertissement_rienNEstJournalise() throws Exception {
+        try (LogCapture logs = LogCapture.of(ANRProcessor.class)) {
+            processorReturning(extraction(100, 0, 0)).process(item(inputDir.resolve("x.pdf")));
+
+            assertThat(logs.messages(Level.WARN)).isEmpty();
+            assertThat(logs.messages(Level.INFO)).isEmpty();
+        }
+    }
+
+    @Test
+    void textePerdu_signaleEnWarnAvecCheminRelatif() throws Exception {
+        try (LogCapture logs = LogCapture.of(ANRProcessor.class)) {
+            processorReturning(extraction(200, 50, 0)).process(item(inputDir.resolve("THESE_1/x.pdf")));
+
+            assertThat(logs.messages(Level.WARN)).containsExactly(
+                    Path.of("THESE_1", "x.pdf") + " : texte perdu 25,0 % (50/200 glyphes)");
+        }
+    }
+
+    @Test
+    void texteEntierementReconstitue_signaleEnInfo() throws Exception {
+        try (LogCapture logs = LogCapture.of(ANRProcessor.class)) {
+            processorReturning(extraction(1000, 0, 1000)).process(item(inputDir.resolve("x.pdf")));
+
+            assertThat(logs.messages(Level.WARN)).isEmpty();
+            assertThat(logs.messages(Level.INFO)).containsExactly(
+                    "x.pdf : texte perdu 0,0 % (0/1000 glyphes), reconstitué 100,0 % via les polices système");
+        }
+    }
+
+    @Test
+    void partInfimeMaisNonNulle_afficheeMoinsDeZeroVirguleUn() throws Exception {
+        try (LogCapture logs = LogCapture.of(ANRProcessor.class)) {
+            processorReturning(extraction(10_000, 1, 2)).process(item(inputDir.resolve("x.pdf")));
+
+            assertThat(logs.messages(Level.WARN)).containsExactly(
+                    "x.pdf : texte perdu < 0,1 % (1/10000 glyphes), reconstitué < 0,1 % via les polices système");
+        }
+    }
+
+    @Test
+    void avertissementsPdfBox_regroupesParTypePuisCollecteFermee() throws Exception {
         PDFTextExtractor extractor = mock(PDFTextExtractor.class);
         when(extractor.extractTextFromPdf(anyString(), anyInt())).thenAnswer(invocation -> {
             var pdfboxLogger = LogManager.getLogger("org.apache.pdfbox.pdmodel.font.PDSimpleFont");
@@ -142,9 +206,17 @@ class ANRProcessorTest {
             throw new IOException("illisible");
         });
 
-        ANRMatchDTO result = processor(extractor, 50, 5).process(item(inputDir.resolve("x.pdf")));
+        try (LogCapture logs = LogCapture.of(ANRProcessor.class)) {
+            ANRMatchDTO result = processor(extractor, 50, 5).process(item(inputDir.resolve("x.pdf")));
 
-        assertThat(result.errorMessage()).endsWith("illisible");
+            assertThat(result.errorMessage()).endsWith("illisible");
+            // Fichier illisible : pas de statistiques de glyphes, seulement les avertissements, du plus fréquent au moins fréquent
+            assertThat(logs.messages(Level.WARN)).singleElement().asString()
+                    .startsWith("x.pdf, 3 avertissement(s) PDFBox :")
+                    .containsSubsequence(
+                            "2 x WARN PDSimpleFont - No Unicode mapping in font Calibri",
+                            "1 x ERROR Foo - Bad table N");
+        }
         // La collecte a été fermée par le processor : plus rien n'est comptabilisé sur ce thread
         assertThat(PdfWarningCollector.stop()).isEmpty();
     }

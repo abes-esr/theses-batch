@@ -37,6 +37,9 @@ class ANRJobIntegrationTest {
     @TempDir
     static Path outputDir;
 
+    @TempDir
+    static Path fontsDir;
+
     @Autowired
     private JobOperatorTestUtils jobOperatorTestUtils;
 
@@ -54,6 +57,7 @@ class ANRJobIntegrationTest {
         registry.add("app.anr.context-characters", () -> "8");
         registry.add("app.anr.chunk-size", () -> "2");
         registry.add("app.anr.exclude-keywords", () -> "annexe");
+        registry.add("app.anr.fonts-dir", fontsDir::toString);
         registry.add("app.anr.writers.enabled", () -> "csv,json");
         registry.add("app.anr.writers.header", () -> "file_name,page_number,match_value,error_message,nnt");
         registry.add("app.anr.json.pretty-print", () -> "false");
@@ -75,6 +79,9 @@ class ANRJobIntegrationTest {
             TestPdfs.create(inputDir.resolve("THESE_3/these.pdf"), "Labex et PIA");
             Files.createDirectories(inputDir.resolve("THESE_4"));
             Files.writeString(inputDir.resolve("THESE_4/corrompu.pdf"), "pas un pdf");
+            // PDF « Word » sans /ToUnicode : le numéro n'est lisible que grâce à la police système
+            TestPdfs.createType0WithoutToUnicode(inputDir.resolve("THESE_5/word.pdf"), "Projet ANR-21-WORD-0005");
+            TestPdfs.installFont(fontsDir);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
@@ -86,10 +93,10 @@ class ANRJobIntegrationTest {
 
         assertThat(execution.getStatus()).isEqualTo(BatchStatus.COMPLETED);
         StepExecution step = execution.getStepExecutions().iterator().next();
-        assertThat(step.getReadCount()).isEqualTo(4);
+        assertThat(step.getReadCount()).isEqualTo(5);
         // Le PDF sans correspondance est filtré par le processor
         assertThat(step.getFilterCount()).isEqualTo(1);
-        assertThat(step.getWriteCount()).isEqualTo(3);
+        assertThat(step.getWriteCount()).isEqualTo(4);
 
         List<String> csv = Files.readAllLines(outputDir.resolve(RUN + "_anr_results_unknown.csv"));
         assertThat(csv.getFirst()).isEqualTo("file_name,page_number,match_value,error_message,nnt");
@@ -97,9 +104,10 @@ class ANRJobIntegrationTest {
                 "\"these.pdf\",2,\"ANR-15-CE23-0001\",,",
                 "\"these.pdf\",1,\"Labex\",,",
                 "\"these.pdf\",1,\"PIA\",,");
-        // Le PDF corrompu produit une ligne d'erreur, dans l'ordre du chemin (THESE_4 en dernier)
-        assertThat(csv).hasSize(5);
+        // Le PDF corrompu produit une ligne d'erreur ; les lignes suivent l'ordre des chemins
+        assertThat(csv).hasSize(6);
         assertThat(csv.get(4)).startsWith("\"corrompu.pdf\",,,\"Erreur lors du traitement du fichier:");
+        assertThat(csv.get(5)).isEqualTo("\"word.pdf\",1,\"ANR-21-WORD-0005\",,");
 
         String json = Files.readString(outputDir.resolve(RUN + "_anr_results_unknown.json"));
         assertThat(json).startsWith("[{").contains("\"match_value\":\"ANR-15-CE23-0001\"").contains("corrompu.pdf");

@@ -23,7 +23,7 @@ RUN mvn --batch-mode \
 
 ###
 # Image pour l'exécution du batch theses-batch
-FROM eclipse-temurin:21-jdk
+FROM eclipse-temurin:21-jre
 WORKDIR /scripts/
 
 # Configuration des locales fr_FR

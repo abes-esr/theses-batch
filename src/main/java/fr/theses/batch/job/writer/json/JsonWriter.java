@@ -2,6 +2,7 @@ package fr.theses.batch.job.writer.json;
 
 import fr.theses.batch.business.anr.model.dto.ANRMatchDTO;
 import fr.theses.batch.business.anr.model.dto.ANRPageMatchDTO;
+import fr.theses.batch.job.RunTimestamp;
 import fr.theses.batch.job.writer.ANRFormatWriter;
 import org.springframework.batch.infrastructure.item.Chunk;
 import org.springframework.beans.factory.annotation.Value;
@@ -11,8 +12,6 @@ import tools.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -79,19 +78,26 @@ public class JsonWriter implements ANRFormatWriter {
         }
     }
 
-    private static final DateTimeFormatter TIMESTAMP_FORMATTER =
-            DateTimeFormatter.ofPattern("yyyy-MM-dd-HH-mm-ss");
-
     private final String outputDir;
+    private final String runTimestamp;
     private final String jsonHeader;
     private final ObjectMapper objectMapper;
     private final boolean prettyPrint;
     private final List<JsonField> configuredFields;
 
+    /**
+     * Résultats cumulés depuis le début du run, par année de soutenance.
+     * Un tableau JSON ne se complète pas en ajout : chaque fichier est réécrit en entier
+     * à chaque chunk, pour rester valide même si le run s'interrompt.
+     */
+    private final Map<String, List<Map<String, Object>>> resultsByYear = new HashMap<>();
+
     public JsonWriter(
+            RunTimestamp runTimestamp,
             @Value("${app.anr.output-dir:'/output'}") String outputDir,
             @Value("${app.anr.json.pretty-print:true}") boolean prettyPrint,
             @Value("${app.anr.writers.header:file_path,file_name,page_number,match_value,preceding_context,following_context,analyzed_pages_number,total_pages,processing_time,error_message,nnt,doi,defense_date}") String jsonHeader) {
+        this.runTimestamp = runTimestamp.value();
         this.outputDir = outputDir;
         this.prettyPrint = prettyPrint;
         this.jsonHeader = jsonHeader;
@@ -120,25 +126,24 @@ public class JsonWriter implements ANRFormatWriter {
 
     @Override
     public void write(List<? extends ANRMatchDTO> items) throws IOException {
-        String timestamp = LocalDateTime.now().format(TIMESTAMP_FORMATTER);
-
         // Grouper les items par année de soutenance
         Map<String, List<ANRMatchDTO>> itemsByYear = items.stream()
                 .collect(Collectors.groupingBy(this::extractYear));
 
-        // Créer un fichier par année
+        // Un seul fichier par année pour tout le run, réécrit avec l'ensemble des résultats cumulés
         for (Map.Entry<String, List<ANRMatchDTO>> entry : itemsByYear.entrySet()) {
             String year = entry.getKey();
             List<ANRMatchDTO> yearItems = entry.getValue();
-            Path jsonFilePath = Path.of(outputDir, timestamp + "_anr_results_" + year + ".json");
+            Path jsonFilePath = Path.of(outputDir, runTimestamp + "_anr_results_" + year + ".json");
 
             if (!Files.exists(jsonFilePath.getParent())) {
                 Files.createDirectories(jsonFilePath.getParent());
             }
 
-            List<Map<String, Object>> results = yearItems.stream()
+            List<Map<String, Object>> results = resultsByYear.computeIfAbsent(year, y -> new ArrayList<>());
+            yearItems.stream()
                     .flatMap(item -> toJsonResults(item).stream())
-                    .collect(Collectors.toList());
+                    .forEach(results::add);
 
             if (prettyPrint) {
                 objectMapper.writerWithDefaultPrettyPrinter()

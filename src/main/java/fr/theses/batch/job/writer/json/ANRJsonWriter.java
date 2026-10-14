@@ -17,7 +17,7 @@ import java.util.*;
  * Les champs et les lignes viennent d'ANRResultRows ; ce writer ne fait que les sérialiser en JSON
  */
 @Component
-public class JsonWriter implements ANRFormatWriter {
+public class ANRJsonWriter implements ANRFormatWriter {
 
     private final ANRResultRows resultRows;
     private final ObjectMapper objectMapper;
@@ -30,7 +30,7 @@ public class JsonWriter implements ANRFormatWriter {
      */
     private final Map<String, List<Map<String, Object>>> resultsByYear = new HashMap<>();
 
-    public JsonWriter(
+    public ANRJsonWriter(
             ANRResultRows resultRows,
             @Value("${app.anr.json.pretty-print:true}") boolean prettyPrint) {
         this.resultRows = resultRows;

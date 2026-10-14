@@ -1,5 +1,7 @@
 #!/bin/bash
 
-exec java -jar /scripts/theses-batch.jar \
-          -Duser.timezone=Europe/Paris \
-          -Duser.language=fr
+# "$@" pour surcharges Spring (ex. --app.anr.max-files=50).
+exec java -Duser.timezone=Europe/Paris \
+          -Duser.language=fr \
+          -jar /scripts/theses-batch.jar \
+          "$@"

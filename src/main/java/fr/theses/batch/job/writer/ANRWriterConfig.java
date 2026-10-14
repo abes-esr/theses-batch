@@ -10,7 +10,11 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 /**
  * Configuration des writers ANR
@@ -20,27 +24,35 @@ import java.util.List;
 @Configuration
 public class ANRWriterConfig {
 
+    /**
+     * Assemble les writers des formats listés dans app.anr.writers.enabled
+     * Une valeur inconnue ou une liste vide fait échouer le démarrage plutôt que de produire un run sans sortie ;
+     * un format répété n'est branché qu'une fois, sans quoi chaque ligne serait écrite en double
+     */
     @Bean
     public CompositeItemWriter<ANRMatchDTO> anrCompositeWriter(
             CsvWriter csvWriter,
             JsonWriter jsonWriter,
             @Value("${app.anr.writers.enabled:csv,json}") String[] enabledWriters) {
 
-        List<ItemWriter<? super ANRMatchDTO>> delegates = new ArrayList<>();
+        Set<String> formats = new LinkedHashSet<>();
+        Arrays.stream(enabledWriters)
+                .map(format -> format.trim().toLowerCase(Locale.ROOT))
+                .filter(format -> !format.isEmpty())
+                .forEach(formats::add);
 
-        // Ajouter les writers activés via la configuration
-        for (String writer : enabledWriters) {
-            switch (writer.trim().toLowerCase()) {
-                case "csv":
-                    delegates.add((ItemWriter<? super ANRMatchDTO>) csvWriter);
-                    break;
-                case "json":
-                    delegates.add((ItemWriter<? super ANRMatchDTO>) jsonWriter);
-                    break;
-                default:
-                    // Ignorer les valeurs inconnues
-                    break;
-            }
+        if (formats.isEmpty()) {
+            throw new IllegalArgumentException("app.anr.writers.enabled must list at least one format (csv, json)");
+        }
+
+        List<ItemWriter<? super ANRMatchDTO>> delegates = new ArrayList<>();
+        for (String format : formats) {
+            delegates.add(switch (format) {
+                case "csv" -> csvWriter;
+                case "json" -> jsonWriter;
+                default -> throw new IllegalArgumentException(
+                        "Unknown writer in app.anr.writers.enabled: '" + format + "' (expected: csv, json)");
+            });
         }
 
         CompositeItemWriter<ANRMatchDTO> writer = new CompositeItemWriter<>();

@@ -1,9 +1,9 @@
 package fr.theses.batch.job.writer.csv;
 
 import fr.theses.batch.business.anr.model.dto.ANRMatchDTO;
-import fr.theses.batch.job.writer.ANRFormatWriter;
 import fr.theses.batch.job.writer.ANRResultRows;
 import org.springframework.batch.infrastructure.item.Chunk;
+import org.springframework.batch.infrastructure.item.ItemWriter;
 import org.springframework.stereotype.Component;
 
 import java.io.BufferedWriter;
@@ -22,7 +22,7 @@ import java.util.stream.Collectors;
  * Les colonnes et les lignes viennent d'ANRResultRows ; ce writer ne fait que les sérialiser en CSV
  */
 @Component
-public class ANRCsvWriter implements ANRFormatWriter {
+public class ANRCsvWriter implements ItemWriter<ANRMatchDTO> {
 
     private static final String QUOTE = "\"";
     private static final String SEPARATOR = ",";
@@ -35,13 +35,8 @@ public class ANRCsvWriter implements ANRFormatWriter {
     }
 
     @Override
-    public void write(Chunk<? extends ANRMatchDTO> chunk) throws Exception {
-        write(chunk.getItems());
-    }
-
-    @Override
-    public void write(List<? extends ANRMatchDTO> items) throws IOException {
-        for (Map.Entry<String, List<ANRMatchDTO>> entry : resultRows.groupByYear(items).entrySet()) {
+    public void write(Chunk<? extends ANRMatchDTO> chunk) throws IOException {
+        for (Map.Entry<String, List<ANRMatchDTO>> entry : resultRows.groupByYear(chunk.getItems()).entrySet()) {
             // Fichier commun à tout le run : les chunks suivants y sont ajoutés
             Path csvFilePath = resultRows.resultFile(entry.getKey(), "csv");
 

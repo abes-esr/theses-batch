@@ -14,7 +14,6 @@ import org.springframework.batch.infrastructure.item.support.CompositeItemWriter
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.transaction.PlatformTransactionManager;
 
 import java.util.List;
 
@@ -45,16 +44,16 @@ public class ANRBatchConfiguration {
 
     /**
      * Crée le step ANR
+     * Sans transactionManager explicite, Spring Batch utilise un ResourcelessTransactionManager :
+     * aucune ressource transactionnelle n'est en jeu, les writers n'écrivent que des fichiers.
      */
     @Bean
     public Step anrStep(JobRepository jobRepository,
-                        PlatformTransactionManager transactionManager,
                         ANRReader anrReader,
                         CompositeItemProcessor<ANRMatchDTO, ANRMatchDTO> anrCompositeProcessor,
                         CompositeItemWriter<ANRMatchDTO> anrCompositeWriter) {
         return new StepBuilder("anrStep", jobRepository)
                 .<ANRMatchDTO, ANRMatchDTO>chunk(chunkSize)
-                .transactionManager(transactionManager)
                 .reader(anrReader)
                 .processor(anrCompositeProcessor)
                 .writer(anrCompositeWriter)

@@ -19,6 +19,9 @@ app:
     context-characters: ${THESES_BATCH_ANR_CONTEXT_CHARACTERS}
     chunk-size: ${THESES_BATCH_ANR_CHUNK_SIZE}
     exclude-keywords: ${THESES_BATCH_ANR_EXCLUDE_KEYWORDS}
+    # Nombre de répertoires listés simultanément lors du parcours de input-dir.
+    # Sur un partage réseau (NFS), le parcours attend surtout le serveur : 8 à 32 recouvrent ces attentes.
+    scan-threads: ${THESES_BATCH_ANR_SCAN_THREADS:8}
     # Polices TrueType (.ttf / .ttc) servant à reconstituer le texte des PDF dont les polices
     # n'ont pas de correspondance Unicode (PDF Word : Times New Roman, Arial, Calibri...).
     # Vide = désactivé. Windows : C:/Windows/Fonts ; Linux : /usr/share/fonts

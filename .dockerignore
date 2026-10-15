@@ -1,0 +1,34 @@
+# Java
+**.class
+**.jar
+
+# Maven
+target/
+.m2/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+
+# Git
+.git/
+.gitignore
+
+# Logs
+*.log
+
+# Output
+output/
+
+# Documentation
+docs/
+
+# Docker
+Dockerfile
+.dockerignore
+
+# Environment
+**/application.yml

@@ -1,0 +1,43 @@
+spring:
+  application:
+    name: theses-batch
+  batch:
+    job:
+      enabled: true
+  # Depuis Spring Boot 4, spring-boot-starter-batch fonctionne sans base :
+  # le JobRepository est en memoire et aucune table BATCH_* n'est creee.
+  # Aucune datasource n'est declaree : les resultats ne sont ecrits qu'en CSV / JSON.
+
+app:
+  anr:
+    pattern: ${THESES_BATCH_ANR_PATTERN}
+    input-dir: /input
+    output-dir: /output
+    max-files: ${THESES_BATCH_ANR_MAX_FILES}
+    offset: ${THESES_BATCH_ANR_OFFSET}
+    nb-pages: ${THESES_BATCH_ANR_NB_PAGES}
+    context-characters: ${THESES_BATCH_ANR_CONTEXT_CHARACTERS}
+    chunk-size: ${THESES_BATCH_ANR_CHUNK_SIZE}
+    exclude-keywords: ${THESES_BATCH_ANR_EXCLUDE_KEYWORDS}
+    # Polices TrueType (.ttf / .ttc) servant à reconstituer le texte des PDF dont les polices
+    # n'ont pas de correspondance Unicode (PDF Word : Times New Roman, Arial, Calibri...).
+    # Vide = désactivé. Windows : C:/Windows/Fonts ; Linux : /usr/share/fonts
+    fonts-dir: ${THESES_BATCH_ANR_FONTS_DIR:}
+    # Configuration des writers
+    writers:
+      enabled: ${THESES_BATCH_ANR_WRITERS_ENABLED}
+      header: ${THESES_BATCH_ANR_WRITERS_HEADER}
+    json:
+      pretty-print: ${THESES_BATCH_ANR_JSON_PRETTY_PRINT}
+  solr:
+    enabled: ${THESES_BATCH_SOLR_ENABLED}
+    base-url: ${THESES_BATCH_SOLR_BASE_URL}
+    id-field: ${THESES_BATCH_SOLR_ID_FIELD}
+    nnt-field: ${THESES_BATCH_SOLR_NNT_FIELD}
+    doi-field: ${THESES_BATCH_SOLR_DOI_FIELD}
+    defense-date-field: ${THESES_BATCH_SOLR_DEFENSE_DATE_FIELD}
+    connect-timeout: ${THESES_BATCH_SOLR_CONNECT_TIMEOUT}
+    read-timeout: ${THESES_BATCH_SOLR_READ_TIMEOUT}
+
+# Logging : appenders et niveaux dans log4j2-spring.xml
+# Surcharge ponctuelle : --logging.level.fr.theses.batch=DEBUG

@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Configuration Log4j2 du batch.
+
+  Le suffixe "-spring" du nom de fichier est requis : c'est lui qui autorise
+  le lookup ${spring:...}, résolu sur l'Environment Spring Boot.
+
+  Le fichier de log porte l'horodatage du run (propriété système app.run.timestamp,
+  fixée par RunTimestamp.initialize() dans main), le même que les fichiers de
+  résultats. ${date:...} n'est qu'un repli si l'application démarre sans passer
+  par main ; il est évalué une seule fois, au chargement de la configuration.
+-->
+<Configuration status="WARN">
+
+    <Properties>
+        <Property name="outputDir">${spring:app.anr.output-dir:-output}</Property>
+        <Property name="logPattern">%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%t] %c{1.} - %msg%n</Property>
+    </Properties>
+
+    <Appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout pattern="${logPattern}"/>
+        </Console>
+        <File name="BatchFile" fileName="${outputDir}/${sys:app.run.timestamp:-${date:yyyy-MM-dd-HH-mm-ss}}_batch.log">
+            <PatternLayout pattern="${logPattern}"/>
+        </File>
+    </Appenders>
+
+    <Loggers>
+        <!-- Les niveaux sont définis ici et nulle part ailleurs : une clé
+             logging.level.* dans application.yml serait appliquée APRES ce
+             fichier et masquerait toute modification faite ci-dessous.
+             Pour un run ponctuel, passer la propriete logging.level.fr.theses.batch
+             en argument de ligne de commande. -->
+
+        <!-- PDFBox / FontBox émettent un avertissement par glyphe sans correspondance
+             Unicode, souvent des centaines par PDF. Pendant le traitement d'un fichier,
+             PdfWarningFilter les compte au lieu de les écrire, et ANRProcessor
+             journalise un récapitulatif par type pour ce fichier. -->
+        <Logger name="org.apache.pdfbox" level="WARN">
+            <PdfWarningFilter/>
+        </Logger>
+        <Logger name="org.apache.fontbox" level="WARN">
+            <PdfWarningFilter/>
+        </Logger>
+        <!-- « Format 14 cmap table is not supported » : table des variantes de glyphes,
+             sans effet sur l'extraction ; émis surtout au chargement des polices système
+             (app.anr.fonts-dir). -->
+        <Logger name="org.apache.fontbox.ttf.CmapSubtable" level="ERROR"/>
+
+        <Root level="INFO">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="BatchFile"/>
+        </Root>
+    </Loggers>
+
+</Configuration>

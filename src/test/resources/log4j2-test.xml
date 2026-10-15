@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Configuration Log4j2 des tests : console seule, aucun fichier de log écrit.
+  Log4j2 (et Spring Boot) la préfèrent à log4j2-spring.xml lorsqu'elle est sur le classpath.
+  Le PdfWarningFilter est conservé pour que les tests exercent la collecte des avertissements PDFBox.
+-->
+<Configuration status="WARN">
+    <Appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout pattern="%d{HH:mm:ss.SSS} %-5level %c{1.} - %msg%n"/>
+        </Console>
+    </Appenders>
+    <Loggers>
+        <Logger name="org.apache.pdfbox" level="WARN">
+            <PdfWarningFilter/>
+        </Logger>
+        <Logger name="org.apache.fontbox" level="WARN">
+            <PdfWarningFilter/>
+        </Logger>
+        <Root level="WARN">
+            <AppenderRef ref="Console"/>
+        </Root>
+    </Loggers>
+</Configuration>

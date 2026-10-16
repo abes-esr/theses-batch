@@ -8,7 +8,7 @@ spring:
       initialize-schema: always  # Crée automatiquement les tables BATCH_* au démarrage
   datasource:
     # Configuration H2 persistante pour permettre la reprise des jobs Spring Batch
-    url: jdbc:h2:file:/data/batchdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    url: "jdbc:h2:file:/data/batchdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE"
     driver-class-name: org.h2.Driver
     username: sa
     password: ""

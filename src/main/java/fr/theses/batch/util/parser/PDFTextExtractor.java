@@ -1,5 +1,6 @@
 package fr.theses.batch.util.parser;
 
+import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.cos.COSDictionary;
 import org.apache.pdfbox.io.RandomAccessReadBufferedFile;
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Service;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -22,6 +24,7 @@ import java.util.Set;
  * Utilise Apache PDFBox pour extraire le texte page par page
  */
 @Service
+@Slf4j
 public class PDFTextExtractor {
 
     private final SystemFontUnicodeRecovery unicodeRecovery;
@@ -34,6 +37,9 @@ public class PDFTextExtractor {
      * Extrait le texte d'un fichier PDF avec un maximum de pages.
      * Les polices sans correspondance Unicode sont d'abord complétées via les polices système
      * (voir {@link SystemFontUnicodeRecovery}), et les glyphes perdus sont comptés.
+     * <p>
+     * Si la récupération des polices échoue (PDF malformé), l'extraction continue
+     * sans le recovery, qui est une optimisation et non une nécessité.
      *
      * @param filePath Chemin du fichier PDF
      * @param maxPages Nombre maximum de pages à lire (0 pour toutes)
@@ -51,7 +57,17 @@ public class PDFTextExtractor {
             int pageCount = document.getNumberOfPages();
             int pagesToRead = maxPages > 0 ? Math.min(maxPages, pageCount) : pageCount;
 
-            GlyphCountingStripper stripper = new GlyphCountingStripper(unicodeRecovery.recover(document, pagesToRead));
+            // Tentative de recovery des polices (optimisation)
+            Map<COSDictionary, Set<Integer>> recoveredCodes;
+            try {
+                recoveredCodes = unicodeRecovery.recover(document, pagesToRead);
+            } catch (IllegalStateException e) {
+                // Le recovery a échoué : PDF malformé, on continue sans
+                log.warn("Recovery des polices échoué pour {}, extraction sans recovery : {}", filePath, e.getMessage());
+                recoveredCodes = Collections.emptyMap();
+            }
+
+            GlyphCountingStripper stripper = new GlyphCountingStripper(recoveredCodes);
 
             for (int i = 0; i < pagesToRead; i++) {
                 stripper.setStartPage(i + 1);

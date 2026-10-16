@@ -63,6 +63,10 @@ public class SystemFontUnicodeRecovery {
 
     /**
      * Complète les polices des premières pages du document.
+     * <p>
+     * Les exceptions sont capturées car un PDF malformé peut contenir des pages
+     * avec une structure invalide (ex: COSName au lieu de PDPage). Ces erreurs
+     * sont considérées comme des problèmes de données, pas des bugs.
      *
      * @param document    Document ouvert
      * @param pagesToRead Nombre de pages qui seront lues
@@ -72,7 +76,13 @@ public class SystemFontUnicodeRecovery {
         Map<COSDictionary, Set<Integer>> recovered = new IdentityHashMap<>();
         Set<COSBase> visited = Collections.newSetFromMap(new IdentityHashMap<>());
         for (int i = 0; i < pagesToRead; i++) {
-            scan(document.getPage(i).getResources(), visited, recovered);
+            try {
+                scan(document.getPage(i).getResources(), visited, recovered);
+            } catch (IllegalStateException e) {
+                // PDF malformé : une page a une structure inattendue
+                log.warn("Page {} ignorée (PDF malformé) : {}", i, e.getMessage());
+                // On passe à la page suivante sans propager l'exception
+            }
         }
         if (!recovered.isEmpty()) {
             // les polices déjà instanciées ont lu l'ancienne table /ToUnicode : on repart d'un cache vide
@@ -94,7 +104,7 @@ public class SystemFontUnicodeRecovery {
                         recovered.put(font.getCOSObject(), codes);
                     }
                 }
-            } catch (IOException e) {
+            } catch (IOException |IllegalStateException e) {
                 log.debug("Police {} ignorée : {}", name.getName(), e.getMessage());
             }
         }
@@ -103,7 +113,7 @@ public class SystemFontUnicodeRecovery {
                 if (resources.getXObject(name) instanceof PDFormXObject form) {
                     scan(form.getResources(), visited, recovered);
                 }
-            } catch (IOException e) {
+            } catch (IOException | IllegalStateException e) {
                 log.debug("XObject {} ignoré : {}", name.getName(), e.getMessage());
             }
         }

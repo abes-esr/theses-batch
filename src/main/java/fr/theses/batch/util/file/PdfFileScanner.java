@@ -60,7 +60,9 @@ public final class PdfFileScanner {
                 return ioException;
             }
         }
-        throw e;
+        // Si aucune IOException n'est trouvée dans la chaîne des causes,
+        // on enveloppe l'exception dans une IOException pour respecter le contrat du méthode
+        return new IOException(e);
     }
 
     private static final class DirectoryTask extends RecursiveAction {

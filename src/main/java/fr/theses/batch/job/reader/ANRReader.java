@@ -2,6 +2,7 @@ package fr.theses.batch.job.reader;
 
 import fr.theses.batch.business.anr.model.dto.ANRMatchDTO;
 import fr.theses.batch.business.anr.service.ANRSearchService;
+import fr.theses.batch.util.file.PdfFileScanner;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.batch.infrastructure.item.ItemReader;
 import org.springframework.batch.infrastructure.item.NonTransientResourceException;
@@ -11,17 +12,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
-import java.util.stream.Stream;
 
 /**
  * Reader pour le traitement ANR
@@ -34,8 +32,9 @@ public class ANRReader implements ItemReader<ANRMatchDTO> {
     private final ANRSearchService anrSearchService;
     private final String inputDir;
     private final List<String> excludeKeywords;
+    private final int scanThreads;
     
-    private Iterator<File> fileIterator;
+    private Iterator<String> fileIterator;
     private int filesProcessed = 0;
     private int maxFiles;
     private int offset;
@@ -45,14 +44,21 @@ public class ANRReader implements ItemReader<ANRMatchDTO> {
                      @Value("${app.anr.input-dir:/input}") String inputDir,
                      @Value("${app.anr.exclude-keywords:}") String excludeKeywords,
                      @Value("${app.anr.max-files:10000}") int maxFiles,
-                     @Value("${app.anr.offset:0}") int offset) {
+                     @Value("${app.anr.offset:0}") int offset,
+                     @Value("${app.anr.scan-threads:8}") int scanThreads) {
         this.anrSearchService = anrSearchService;
         this.inputDir = inputDir;
-        this.excludeKeywords = Arrays.asList(excludeKeywords.split(","));
+        // Mis en minuscules une fois pour toutes ; une entrée vide exclurait tous les fichiers
+        this.excludeKeywords = Arrays.stream(excludeKeywords.split(","))
+                .filter(keyword -> !keyword.isEmpty())
+                .map(String::toLowerCase)
+                .toList();
         this.maxFiles = maxFiles;
         this.offset = offset;
-        
-        log.info("Initialisation ANRReader avec inputDir={}, maxFiles={}, offset={}", inputDir, maxFiles, offset);
+        this.scanThreads = scanThreads;
+
+        log.info("Initialisation ANRReader avec inputDir={}, maxFiles={}, offset={}, scanThreads={}",
+                inputDir, maxFiles, offset, scanThreads);
         initializeFileIterator();
     }
     
@@ -61,7 +67,7 @@ public class ANRReader implements ItemReader<ANRMatchDTO> {
      */
     private void initializeFileIterator() {
         try {
-            List<File> allFiles = findAllPdfFiles();
+            List<String> allFiles = findAllPdfFiles();
             fileIterator = allFiles.iterator();
 
             // Avance jusqu'à l'offset
@@ -79,29 +85,28 @@ public class ANRReader implements ItemReader<ANRMatchDTO> {
     /**
      * Trouve tous les fichiers PDF dans la structure de répertoires
      * 
-     * @return Liste des fichiers PDF triés
+     * @return Chemins absolus des fichiers PDF, triés
      * @throws IOException En cas d'erreur d'accès aux fichiers
      */
-    private List<File> findAllPdfFiles() throws IOException {
-        List<File> pdfFiles = new ArrayList<>();
-        
-        Path inputPath = Path.of(inputDir);
+    private List<String> findAllPdfFiles() throws IOException {
+        Path inputPath = Path.of(inputDir).toAbsolutePath();
         if (!Files.exists(inputPath)) {
             log.error("Le répertoire d'entrée (app.anr.input-dir) n'existe pas : {}", inputDir);
             throw new IOException("Input directory does not exist: " + inputDir);
         }
-        
-        try (Stream<Path> paths = Files.walk(inputPath)) {
-            paths.filter(Files::isRegularFile)
-                .filter(path -> path.toString().toLowerCase().endsWith(".pdf"))
-                .map(Path::toFile)
-                .filter(file -> !anrSearchService.shouldExcludeFile(file.getName(), excludeKeywords))
-                .sorted(Comparator.comparing(File::getAbsolutePath))
-                .forEach(pdfFiles::add);
-        }
 
-        log.info("Nombre de fichiers PDF trouvés : {}", pdfFiles.size());
-        
+        // Tri sur la chaîne du chemin absolu, calculée une seule fois : c'est l'ordre auquel s'applique l'offset
+        long start = System.nanoTime();
+        List<String> pdfFiles = PdfFileScanner.scan(inputPath,
+                        name -> !anrSearchService.shouldExcludeFile(name, excludeKeywords), scanThreads)
+                .stream()
+                .map(Path::toString)
+                .sorted()
+                .toList();
+
+        log.info("Nombre de fichiers PDF trouvés : {} (parcours en {} ms, {} threads)",
+                pdfFiles.size(), (System.nanoTime() - start) / 1_000_000, scanThreads);
+
         return pdfFiles;
     }
     
@@ -116,10 +121,9 @@ public class ANRReader implements ItemReader<ANRMatchDTO> {
             return null;
         }
         
-        File file = fileIterator.next();
+        String filePath = fileIterator.next();
         filesProcessed++;
         
-        String filePath = file.getAbsolutePath();
         String fileName = anrSearchService.extractFileName(filePath);
         
         log.debug("Traitement du fichier {}/{}: {}", filesProcessed, maxFiles, fileName);

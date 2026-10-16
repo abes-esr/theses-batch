@@ -104,11 +104,16 @@ public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
                     .withTotalPages(extraction.totalPages())
                     .withProcessingTime(processingDuration.toMillis() / 1000.0);
 
-        } catch (IOException e) {
+        } catch (Exception e) {
+            // Capturer TOUTE exception (PDF malformé = problème de données, pas bug)
+            // Retourner un DTO avec error_message au lieu de propager
             Duration processingDuration = Duration.between(startTime, Instant.now());
+            String filePath = item.filePath();
+            log.warn("Erreur lors du traitement du fichier {} (PDF malformé) : {}", 
+                   relativeToInputDir(filePath), e.getMessage(), e);
             return item
                     .withProcessingTime(processingDuration.toMillis() / 1000.0)
-                    .withErrorMessage("Erreur lors du traitement du fichier: " + e.getMessage());
+                    .withErrorMessage("Erreur PDF: " + e.getMessage());
         } finally {
             logExtractionSummary(relativeToInputDir(item.filePath()), extraction);
         }

@@ -36,6 +36,9 @@ ENV LANG=fr_FR.UTF-8
 ENV LANGUAGE=fr_FR:fr
 ENV LC_ALL=fr_FR.UTF-8
 
+# Créer le répertoire pour la base de données H2 (persistante)
+RUN mkdir -p /data
+
 # Copie du JAR et du script
 COPY ./docker/batch/theses-batch.sh /scripts/theses-batch.sh
 COPY --from=build-image /build/target/*.jar /scripts/theses-batch.jar

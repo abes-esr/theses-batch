@@ -57,6 +57,7 @@ class ANRJobIntegrationTest {
         registry.add("app.anr.context-characters", () -> "8");
         registry.add("app.anr.chunk-size", () -> "2");
         registry.add("app.anr.exclude-keywords", () -> "annexe");
+        registry.add("app.anr.scan-threads", () -> "2");
         registry.add("app.anr.fonts-dir", fontsDir::toString);
         registry.add("app.anr.writers.enabled", () -> "csv,json");
         registry.add("app.anr.writers.header", () -> "file_name,page_number,match_value,error_message,nnt");
@@ -106,7 +107,7 @@ class ANRJobIntegrationTest {
                 "\"these.pdf\",1,\"PIA\",,");
         // Le PDF corrompu produit une ligne d'erreur ; les lignes suivent l'ordre des chemins
         assertThat(csv).hasSize(6);
-        assertThat(csv.get(4)).startsWith("\"corrompu.pdf\",,,\"Erreur lors du traitement du fichier:");
+        assertThat(csv.get(4)).startsWith("\"corrompu.pdf\",,,\"Erreur PDF:");
         assertThat(csv.get(5)).isEqualTo("\"word.pdf\",1,\"ANR-21-WORD-0005\",,");
 
         String json = Files.readString(outputDir.resolve(RUN + "_anr_results_unknown.json"));

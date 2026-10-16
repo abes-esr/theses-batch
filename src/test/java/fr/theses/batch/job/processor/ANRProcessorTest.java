@@ -126,7 +126,7 @@ class ANRProcessorTest {
 
         ANRMatchDTO result = processor(realExtractor(), 50, 10).process(item(absent));
 
-        assertThat(result.errorMessage()).startsWith("Erreur lors du traitement du fichier: File not found");
+        assertThat(result.errorMessage()).startsWith("Erreur PDF: File not found");
         assertThat(result.pageMatches()).isEmpty();
     }
 
@@ -210,8 +210,11 @@ class ANRProcessorTest {
             ANRMatchDTO result = processor(extractor, 50, 5).process(item(inputDir.resolve("x.pdf")));
 
             assertThat(result.errorMessage()).endsWith("illisible");
-            // Fichier illisible : pas de statistiques de glyphes, seulement les avertissements, du plus fréquent au moins fréquent
-            assertThat(logs.messages(Level.WARN)).singleElement().asString()
+            // Fichier illisible : le message d'erreur et les avertissements sont journalisés en WARN
+            assertThat(logs.messages(Level.WARN)).hasSize(2);
+            assertThat(logs.messages(Level.WARN).getFirst())
+                    .isEqualTo("Erreur lors du traitement du fichier x.pdf (PDF malformé) : illisible");
+            assertThat(logs.messages(Level.WARN).get(1))
                     .startsWith("x.pdf, 3 avertissement(s) PDFBox :")
                     .containsSubsequence(
                             "2 x WARN PDSimpleFont - No Unicode mapping in font Calibri",

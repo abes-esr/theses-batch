@@ -4,9 +4,22 @@ spring:
   batch:
     job:
       enabled: true
-  # Depuis Spring Boot 4, spring-boot-starter-batch fonctionne sans base :
-  # le JobRepository est en memoire et aucune table BATCH_* n'est creee.
-  # Aucune datasource n'est declaree : les resultats ne sont ecrits qu'en CSV / JSON.
+    jdbc:
+      initialize-schema: always  # Crée automatiquement les tables BATCH_* au démarrage
+  datasource:
+    # Configuration H2 persistante pour permettre la reprise des jobs Spring Batch
+    url: jdbc:h2:file:/data/batchdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+    hikari:
+      maximum-pool-size: 5
+      connection-timeout: 30000
+  # Configuration pour H2 : stocker les données dans un fichier persistant
+  h2:
+    console:
+      enabled: false
+      path: /h2-console
 
 app:
   anr:
@@ -25,7 +38,7 @@ app:
     # Polices TrueType (.ttf / .ttc) servant à reconstituer le texte des PDF dont les polices
     # n'ont pas de correspondance Unicode (PDF Word : Times New Roman, Arial, Calibri...).
     # Vide = désactivé. Windows : C:/Windows/Fonts ; Linux : /usr/share/fonts
-    fonts-dir: ${THESES_BATCH_ANR_FONTS_DIR:}
+    fonts-dir: ${THESES_BATCH_ANR_FONTS_DIR:/usr/share/fonts}
     # Configuration des writers
     writers:
       enabled: ${THESES_BATCH_ANR_WRITERS_ENABLED}

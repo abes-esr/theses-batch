@@ -107,7 +107,7 @@ class ANRJobIntegrationTest {
                 "\"these.pdf\",1,\"PIA\",,");
         // Le PDF corrompu produit une ligne d'erreur ; les lignes suivent l'ordre des chemins
         assertThat(csv).hasSize(6);
-        assertThat(csv.get(4)).startsWith("\"corrompu.pdf\",,,\"Erreur lors du traitement du fichier:");
+        assertThat(csv.get(4)).startsWith("\"corrompu.pdf\",,,\"Erreur PDF:");
         assertThat(csv.get(5)).isEqualTo("\"word.pdf\",1,\"ANR-21-WORD-0005\",,");
 
         String json = Files.readString(outputDir.resolve(RUN + "_anr_results_unknown.json"));

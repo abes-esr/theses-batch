@@ -55,9 +55,11 @@ class ANRJobIntegrationTest {
         registry.add("app.anr.offset", () -> "0");
         registry.add("app.anr.nb-pages", () -> "10");
         registry.add("app.anr.context-characters", () -> "8");
-        registry.add("app.anr.chunk-size", () -> "2");
+        registry.add("app.anr.chunk-size", () -> "4");
         registry.add("app.anr.exclude-keywords", () -> "annexe");
         registry.add("app.anr.scan-threads", () -> "2");
+        // plusieurs threads de traitement : les lignes doivent malgré tout suivre l'ordre des chemins
+        registry.add("app.anr.process-threads", () -> "4");
         registry.add("app.anr.fonts-dir", fontsDir::toString);
         registry.add("app.anr.writers.enabled", () -> "csv,json");
         registry.add("app.anr.writers.header", () -> "file_name,page_number,match_value,error_message,nnt");

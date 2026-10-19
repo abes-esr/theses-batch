@@ -12,7 +12,9 @@ import org.apache.pdfbox.util.Vector;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.nio.file.NoSuchFileException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -49,11 +51,20 @@ public class PDFTextExtractor {
     public PDFExtraction extractTextFromPdf(String filePath, int maxPages) throws IOException {
         List<PDFPage> pages = new ArrayList<>();
 
-        if (filePath == null || !new File(filePath).exists()) {
-            throw new IOException("File not found: " + filePath);
+        if (filePath == null) {
+            throw new IOException("File not found: null");
         }
 
-        try (PDDocument document = Loader.loadPDF(new RandomAccessReadBufferedFile(new File(filePath)))) {
+        // Pas de File.exists() préalable : l'ouverture signale déjà un fichier absent, et sur NFS
+        // chaque appel système de plus coûte un aller-retour avec le serveur
+        RandomAccessReadBufferedFile input;
+        try {
+            input = new RandomAccessReadBufferedFile(new File(filePath));
+        } catch (NoSuchFileException | FileNotFoundException e) {
+            throw new IOException("File not found: " + filePath, e);
+        }
+
+        try (PDDocument document = Loader.loadPDF(input)) {
             int pageCount = document.getNumberOfPages();
             int pagesToRead = maxPages > 0 ? Math.min(maxPages, pageCount) : pageCount;
 

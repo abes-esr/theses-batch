@@ -12,7 +12,13 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -77,6 +83,35 @@ class SystemFontIndexTest {
 
         assertThat(first).isPresent();
         assertThat(second).isSameAs(first);
+    }
+
+    @Test
+    void find_appelsConcurrents_uneSeulePoliceChargeeEtLisible() throws Exception {
+        TestPdfs.installFont(fontsDir);
+        SystemFontIndex index = index(fontsDir.toString());
+        int threads = 8;
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<Optional<SystemFontIndex.SystemFont>>> results = new ArrayList<>();
+
+        try (ExecutorService executor = Executors.newFixedThreadPool(threads)) {
+            for (int i = 0; i < threads; i++) {
+                results.add(executor.submit(() -> {
+                    start.await();
+                    return index.find("ABCDEF+LiberationSans-Identity-H");
+                }));
+            }
+            start.countDown();
+
+            Optional<SystemFontIndex.SystemFont> first = results.getFirst().get();
+            assertThat(first).isPresent();
+            for (Future<Optional<SystemFontIndex.SystemFont>> result : results) {
+                assertThat(result.get()).isSameAs(first);
+            }
+            // la police a été recopiée puis refermée : elle reste lisible
+            assertThat(first.get().unicodeOf(TestPdfs.glyphId('A'))).isEqualTo("A");
+            assertThat(first.get().unicodeOf(-1)).isNull();
+            assertThat(first.get().unicodeOf(first.get().numberOfGlyphs())).isNull();
+        }
     }
 
     @Test

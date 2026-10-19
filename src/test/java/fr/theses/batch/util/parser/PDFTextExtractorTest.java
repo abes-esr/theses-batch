@@ -83,8 +83,12 @@ class PDFTextExtractorTest {
     void fichierAbsentOuNull_leveIOException() {
         String absent = tempDir.resolve("absent.pdf").toString();
 
-        assertThatThrownBy(() -> extractor.extractTextFromPdf(absent, 0)).isInstanceOf(IOException.class);
-        assertThatThrownBy(() -> extractor.extractTextFromPdf(null, 0)).isInstanceOf(IOException.class);
+        assertThatThrownBy(() -> extractor.extractTextFromPdf(absent, 0))
+                .isInstanceOf(IOException.class)
+                .hasMessage("File not found: " + absent);
+        assertThatThrownBy(() -> extractor.extractTextFromPdf(null, 0))
+                .isInstanceOf(IOException.class)
+                .hasMessage("File not found: null");
     }
 
     @Test

@@ -16,6 +16,7 @@ THESES_BATCH_HEAP_DUMP_DIR="${THESES_BATCH_HEAP_DUMP_DIR:-/output}"
 exec java "${HEAP_OPTION}" \
           -XX:+HeapDumpOnOutOfMemoryError \
           -XX:HeapDumpPath="${THESES_BATCH_HEAP_DUMP_DIR}" \
+          -XX:+UseParallelGC \
           ${THESES_BATCH_JAVA_OPTS} \
           -Duser.timezone=Europe/Paris \
           -Duser.language=fr \

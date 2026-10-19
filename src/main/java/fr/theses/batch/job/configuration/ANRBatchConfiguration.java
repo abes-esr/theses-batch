@@ -17,6 +17,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import org.springframework.transaction.PlatformTransactionManager;
 
 import java.util.List;
 
@@ -53,7 +54,7 @@ public class ANRBatchConfiguration {
      * Threads qui traitent les PDF d'un chunk en parallèle (app.anr.process-threads).
      * Threads démons : le contexte Spring n'est pas fermé en fin de job, et des threads ordinaires
      * empêcheraient la JVM de s'arrêter une fois le job terminé.
-     */
+     **/
     @Bean
     public ThreadPoolTaskExecutor anrProcessExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
@@ -70,15 +71,19 @@ public class ANRBatchConfiguration {
      * aucune ressource transactionnelle n'est en jeu, les writers n'écrivent que des fichiers.
      * Au-delà d'un thread, les items d'un chunk sont traités en parallèle : la lecture et l'écriture
      * restent sur le thread du step, et les items sont écrits dans l'ordre de lecture.
+     * Utilise le PlatformTransactionManager fourni par Spring Boot (via DataSourceConfig)
+     * pour permettre la persistance des métadonnées Batch via le JobRepository.
      */
     @Bean
     public Step anrStep(JobRepository jobRepository,
                         ANRReader anrReader,
                         CompositeItemProcessor<ANRMatchDTO, ANRMatchDTO> anrCompositeProcessor,
                         CompositeItemWriter<ANRMatchDTO> anrCompositeWriter,
-                        ThreadPoolTaskExecutor anrProcessExecutor) {
+                        ThreadPoolTaskExecutor anrProcessExecutor,
+                        PlatformTransactionManager transactionManager) {
         ChunkOrientedStepBuilder<ANRMatchDTO, ANRMatchDTO> builder = new StepBuilder("anrStep", jobRepository)
                 .<ANRMatchDTO, ANRMatchDTO>chunk(chunkSize)
+                .transactionManager(transactionManager)
                 .reader(anrReader)
                 .processor(anrCompositeProcessor)
                 .writer(anrCompositeWriter);

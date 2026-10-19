@@ -6,6 +6,10 @@ spring:
       enabled: true
     jdbc:
       initialize-schema: always  # Crée automatiquement les tables BATCH_* au démarrage
+    # Désactive l'implémentation legacy de ChunkOrientedTasklet (dépréciée dans Spring Batch 6.0)
+    # pour utiliser la nouvelle implémentation moderne compatible avec Spring Batch 7.0
+    tasklet:
+      chunk-oriented: false
   datasource:
     # Configuration H2 persistante pour permettre la reprise des jobs Spring Batch
     url: "jdbc:h2:file:/data/batchdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE"
@@ -35,6 +39,9 @@ app:
     # Nombre de répertoires listés simultanément lors du parcours de input-dir.
     # Sur un partage réseau (NFS), le parcours attend surtout le serveur : 8 à 32 recouvrent ces attentes.
     scan-threads: ${THESES_BATCH_ANR_SCAN_THREADS:8}
+    # Fichier de départ pour la reprise (chemin complet ou partie du chemin)
+    # Exemple: /input/directory/document.pdf ou document.pdf
+    start-file: ${THESES_BATCH_ANR_START_FILE:}
     # Nombre de PDF traités simultanément (extraction du texte, recherche, appel Solr) dans chaque chunk.
     # 1 = traitement séquentiel. Au-delà du nombre de cœurs, le gain devient faible ; prévoir le heap en
     # conséquence (≈ 3 Go mesurés pour 16 threads sur l'échantillon local).

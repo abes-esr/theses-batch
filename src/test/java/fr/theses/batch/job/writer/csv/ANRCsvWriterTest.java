@@ -12,7 +12,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.Random;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -65,6 +68,37 @@ class ANRCsvWriterTest {
 
         assertThat(Files.readAllLines(csv("unknown")))
                 .containsExactly("file_name", "\"a.pdf\"", "\"b.pdf\"", "\"c.pdf\"");
+    }
+
+    @Test
+    void fichierDUnRunPrecedentDeMemeNom_remplaceAuPremierChunk() throws Exception {
+        Files.writeString(csv("unknown"), "ancien contenu\n");
+
+        writer("file_name").write(Chunk.of(item("a.pdf", List.of(), null, null)));
+
+        assertThat(Files.readAllLines(csv("unknown"))).containsExactly("file_name", "\"a.pdf\"");
+    }
+
+    @Test
+    void formatDecimal_identiqueAStringFormat() {
+        List<Double> values = new ArrayList<>(List.of(0.0, -0.0, 0.0005, 0.0015, 1.0005, 2.5e-4, -0.0004, -1.2345,
+                123456.7895, 1e-10, 1e10, 9.9995, 0.1 + 0.2, Double.MIN_VALUE, Double.NaN,
+                Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY));
+        // durées réelles : millisecondes / 1000, et cas d'arrondi à la moitié
+        for (int i = 0; i < 200_000; i++) {
+            values.add(i / 1000.0);
+            values.add(i / 10000.0);
+        }
+        Random random = new Random(42);
+        for (int i = 0; i < 100_000; i++) {
+            values.add(random.nextDouble() * 1000);
+        }
+
+        for (double value : values) {
+            assertThat(ANRCsvWriter.formatDecimal(value))
+                    .as("valeur %s", value)
+                    .isEqualTo(String.format(Locale.US, "%.3f", value));
+        }
     }
 
     @Test

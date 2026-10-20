@@ -37,7 +37,7 @@ class ANRReaderTest {
     }
 
     private ANRReader reader(int maxFiles, int offset) {
-        return new ANRReader(new ANRSearchService(), inputDir.toString(), "annexe,resume", maxFiles, offset, 4);
+        return new ANRReader(new ANRSearchService(), inputDir.toString(), "annexe,resume", maxFiles, offset, 4, "");
     }
 
     private static List<String> readAll(ANRReader reader) throws Exception {
@@ -88,7 +88,7 @@ class ANRReaderTest {
 
     @Test
     void motsClesVides_aucunPdfExclu() throws Exception {
-        ANRReader reader = new ANRReader(new ANRSearchService(), inputDir.toString(), "", 100, 0, 4);
+        ANRReader reader = new ANRReader(new ANRSearchService(), inputDir.toString(), "", 100, 0, 4, "");
 
         assertThat(readAll(reader)).containsExactly("a.PDF", "a_annexe.pdf", "b.pdf", "c.pdf", "racine.pdf");
     }
@@ -97,7 +97,7 @@ class ANRReaderTest {
     void repertoireAbsent_echoueDesLaConstruction() {
         String absent = inputDir.resolve("absent").toString();
 
-        assertThatThrownBy(() -> new ANRReader(new ANRSearchService(), absent, "", 10, 0, 4))
+        assertThatThrownBy(() -> new ANRReader(new ANRSearchService(), absent, "", 10, 0, 4, ""))
                 .isInstanceOf(NonTransientResourceException.class)
                 .hasRootCauseInstanceOf(IOException.class);
     }

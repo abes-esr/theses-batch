@@ -39,6 +39,7 @@ public class ANRReader implements ItemReader<ANRMatchDTO> {
     private int maxFiles;
     private int offset;
     private final String startFile;
+    private int totalToRead;
 
     @Autowired
     public ANRReader(ANRSearchService anrSearchService,
@@ -72,12 +73,15 @@ public class ANRReader implements ItemReader<ANRMatchDTO> {
         try {
             List<String> allFiles = findAllPdfFiles();
             fileIterator = allFiles.iterator();
+            // Éléments déjà tirés de l'itérateur, que read() ne rendra donc pas
+            int consumed = 0;
 
             // Si startFile est spécifié, trouver son index et sauter jusqu'à lui
             if (startFile != null && !startFile.isEmpty()) {
                 boolean found = false;
                 for (int i = 0; fileIterator.hasNext(); i++) {
                     String currentFile = fileIterator.next();
+                    consumed++;
                     if (currentFile.equals(startFile) || currentFile.endsWith(startFile)) {
                         found = true;
                         log.info("Reprise depuis le fichier : {}", currentFile);
@@ -90,16 +94,21 @@ public class ANRReader implements ItemReader<ANRMatchDTO> {
                     // Réinitialiser l'itérateur et appliquer l'offset
                     fileIterator = allFiles.iterator();
                     filesProcessed = 0;
+                    consumed = 0;
                 }
             } else {
                 // Avance jusqu'à l'offset
                 for (int i = 0; i < offset && fileIterator.hasNext(); i++) {
                     fileIterator.next();
+                    consumed++;
                     filesProcessed++;
                 }
             }
-            log.info("Itérateur de fichiers initialisé avec {} fichiers PDF, offset={}, startFile={}",
-                    allFiles.size(), offset, startFile != null ? startFile : "none");
+            // Fichiers que read() rendra : ceux qui restent dans l'itérateur, bornés par max-files
+            // (une position dans la liste, fichiers sautés compris)
+            totalToRead = Math.max(0, Math.min(allFiles.size() - consumed, maxFiles - filesProcessed));
+            log.info("Itérateur de fichiers initialisé avec {} fichiers PDF, offset={}, startFile={}, {} à traiter",
+                    allFiles.size(), offset, startFile != null ? startFile : "none", totalToRead);
         } catch (IOException e) {
             log.error("Erreur lors de l'initialisation de l'itérateur de fichiers", e);
             throw new NonTransientResourceException("Failed to initialize file iterator", e);
@@ -132,6 +141,14 @@ public class ANRReader implements ItemReader<ANRMatchDTO> {
                 pdfFiles.size(), (System.nanoTime() - start) / 1_000_000, scanThreads);
 
         return pdfFiles;
+    }
+
+    /**
+     * Nombre de fichiers que read() rendra sur l'ensemble du run, connu dès la construction :
+     * sert de dénominateur au suivi de progression.
+     */
+    public int getTotalToRead() {
+        return totalToRead;
     }
 
     @Override

@@ -98,9 +98,38 @@ public class ANRResultRows {
     private Map<String, Object> toRow(ANRMatchDTO item, ANRPageMatchDTO pageMatch) {
         Map<String, Object> row = new LinkedHashMap<>();
         for (ANRResultField field : fields) {
-            row.put(field.fieldName(), field.extract(item, pageMatch));
+            Object value = field.extract(item, pageMatch);
+            row.put(field.fieldName(), value instanceof String text ? replaceLoneSurrogates(text) : value);
         }
         return row;
+    }
+
+    /**
+     * Remplace par U+FFFD chaque demi-paire de surrogates isolée : PDFBox en produit à partir de tables
+     * /ToUnicode malformées, et l'encodeur UTF-8 la rejette (MalformedInputException), ce qui fait échouer
+     * tout le step. Les paires complètes (caractères hors BMP) sont conservées.
+     */
+    static String replaceLoneSurrogates(String text) {
+        StringBuilder result = null;
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            boolean pairStart = Character.isHighSurrogate(c) && i + 1 < text.length()
+                    && Character.isLowSurrogate(text.charAt(i + 1));
+            if (pairStart) {
+                if (result != null) {
+                    result.append(c).append(text.charAt(i + 1));
+                }
+                i++;
+            } else if (Character.isSurrogate(c)) {
+                if (result == null) {
+                    result = new StringBuilder(text.length()).append(text, 0, i);
+                }
+                result.append('�');
+            } else if (result != null) {
+                result.append(c);
+            }
+        }
+        return result != null ? result.toString() : text;
     }
 
     /**

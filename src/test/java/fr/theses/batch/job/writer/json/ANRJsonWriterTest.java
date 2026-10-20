@@ -57,6 +57,14 @@ class ANRJsonWriterTest {
     }
 
     @Test
+    void surrogateIsole_remplaceSansFaireEchouerLEcriture() throws Exception {
+        writer(false).write(Chunk.of(item("a\uD835.pdf", List.of(), null)));
+
+        assertThat(read(json("unknown"))).singleElement()
+                .satisfies(row -> assertThat(row.get("file_name")).isEqualTo("a�.pdf"));
+    }
+
+    @Test
     void sansIndentation_surUneLigne() throws Exception {
         writer(false).write(Chunk.of(item("a.pdf", List.of(), null)));
 

@@ -197,6 +197,17 @@ public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
         int start = before ? Math.max(0, position - length) : position;
         int end = before ? position : Math.min(text.length(), position + length);
 
+        // Ne pas couper une paire de surrogates (caractère hors BMP, ex. 𝑥 U+1D465) : une demi-paire
+        // isolée n'est pas encodable en UTF-8. Le caractère coupé est laissé hors du contexte.
+        if (start > 0 && start < end && Character.isLowSurrogate(text.charAt(start))
+                && Character.isHighSurrogate(text.charAt(start - 1))) {
+            start++;
+        }
+        if (end < text.length() && end > start && Character.isLowSurrogate(text.charAt(end))
+                && Character.isHighSurrogate(text.charAt(end - 1))) {
+            end--;
+        }
+
         return text.substring(start, end);
     }
 }

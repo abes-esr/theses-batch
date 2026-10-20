@@ -1,6 +1,7 @@
 package fr.theses.batch.job.configuration;
 
 import fr.theses.batch.business.anr.model.dto.ANRMatchDTO;
+import fr.theses.batch.job.listener.ANRProgressListener;
 import fr.theses.batch.job.processor.ANRProcessor;
 import fr.theses.batch.job.processor.ANRSolrEnricherProcessor;
 import fr.theses.batch.job.reader.ANRReader;
@@ -80,13 +81,15 @@ public class ANRBatchConfiguration {
                         CompositeItemProcessor<ANRMatchDTO, ANRMatchDTO> anrCompositeProcessor,
                         CompositeItemWriter<ANRMatchDTO> anrCompositeWriter,
                         ThreadPoolTaskExecutor anrProcessExecutor,
+                        ANRProgressListener anrProgressListener,
                         PlatformTransactionManager transactionManager) {
         ChunkOrientedStepBuilder<ANRMatchDTO, ANRMatchDTO> builder = new StepBuilder("anrStep", jobRepository)
                 .<ANRMatchDTO, ANRMatchDTO>chunk(chunkSize)
                 .transactionManager(transactionManager)
                 .reader(anrReader)
                 .processor(anrCompositeProcessor)
-                .writer(anrCompositeWriter);
+                .writer(anrCompositeWriter)
+                .listener(anrProgressListener);
         if (processThreads > 1) {
             builder.taskExecutor(anrProcessExecutor);
         }

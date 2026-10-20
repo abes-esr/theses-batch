@@ -103,6 +103,28 @@ class ANRProcessorTest {
     }
 
     @Test
+    void contexte_neCoupeJamaisUnePaireDeSurrogates() throws Exception {
+        // 𝑥 (U+1D465) occupe deux char : la limite de 2 caractères tombe au milieu de la paire, des deux côtés
+        String x = "𝑥";
+        PDFExtraction extraction = new PDFExtraction(List.of(
+                new PDFTextExtractor.PDFPage(1, "a" + x + " ANR-20-ABCD " + x + "a")), 1, 10, 0, 0);
+        PDFTextExtractor extractor = mock(PDFTextExtractor.class);
+        when(extractor.extractTextFromPdf(anyString(), anyInt())).thenReturn(extraction);
+
+        ANRPageMatchDTO match = processor(extractor, 50, 3).process(item(inputDir.resolve("x.pdf")))
+                .pageMatches().getFirst();
+
+        assertThat(match.contextBefore()).isEqualTo(x + " ");
+        assertThat(match.contextAfter()).isEqualTo(" " + x);
+
+        ANRPageMatchDTO court = processor(extractor, 50, 2).process(item(inputDir.resolve("x.pdf")))
+                .pageMatches().getFirst();
+
+        assertThat(court.contextBefore()).isEqualTo(" ");
+        assertThat(court.contextAfter()).isEqualTo(" ");
+    }
+
+    @Test
     void neLitQueNbPages() throws Exception {
         Path pdf = TestPdfs.create(inputDir.resolve("long.pdf"), "rien", "rien", "ANR-15-CE23-0001");
 

@@ -95,8 +95,15 @@ public class SystemFontUnicodeRecovery {
         if (resources == null || !visited.add(resources.getCOSObject())) {
             return;
         }
+        COSDictionary fonts = resources.getCOSObject().getCOSDictionary(COSName.FONT);
         for (COSName name : resources.getFontNames()) {
             try {
+                // avant toute instanciation de la police, ici comme dans PDFTextStripper
+                COSDictionary fontDictionary = fonts == null ? null : fonts.getCOSDictionary(name);
+                if (CidToGidMapLimiter.limit(fontDictionary)) {
+                    log.warn("Police {} : table /CIDToGIDMap démesurée, tronquée à {} octets",
+                            fontDictionary.getNameAsString(COSName.BASE_FONT), CidToGidMapLimiter.MAX_DECODED_BYTES);
+                }
                 PDFont font = resources.getFont(name);
                 if (font != null && visited.add(font.getCOSObject())) {
                     Set<Integer> codes = recover(font);

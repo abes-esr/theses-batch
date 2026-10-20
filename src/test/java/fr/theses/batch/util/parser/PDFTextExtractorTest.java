@@ -1,10 +1,16 @@
 package fr.theses.batch.util.parser;
 
+import fr.theses.batch.support.LogCapture;
 import fr.theses.batch.support.TestPdfs;
+import org.apache.logging.log4j.Level;
+import org.apache.pdfbox.cos.COSDictionary;
+import org.apache.pdfbox.cos.COSName;
+import org.apache.pdfbox.cos.COSStream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -77,6 +83,33 @@ class PDFTextExtractorTest {
         assertThat(extraction.lostGlyphs()).isEqualTo(3);
         assertThat(extraction.lostPercent()).isEqualTo(100.0);
         assertThat(extraction.pages().getFirst().text()).doesNotContain("ANR");
+    }
+
+    @Test
+    void tableCidToGidMapDemesuree_tronqueeEtTexteExtrait() throws IOException {
+        // Table identitÃ© des 65 536 CID suivie de 16 Mo de zÃ©ros : comme 2016PA066214.pdf en production,
+        // dont la table dÃ©codÃ©e dÃ©passait 1 Go et Ã©puisait le heap
+        byte[] map = new byte[CidToGidMapLimiter.MAX_DECODED_BYTES + (16 << 20)];
+        for (int cid = 0; cid < 0x10000; cid++) {
+            map[2 * cid] = (byte) (cid >> 8);
+            map[2 * cid + 1] = (byte) cid;
+        }
+        Path pdf = TestPdfs.createType0(tempDir.resolve("table.pdf"), "ANR-15-CE23-0001", false, font -> {
+            COSStream stream = new COSStream();
+            try (OutputStream output = stream.createOutputStream(COSName.FLATE_DECODE)) {
+                output.write(map);
+            } catch (IOException e) {
+                throw new IllegalStateException(e);
+            }
+            ((COSDictionary) font.getCOSArray(COSName.DESCENDANT_FONTS).getObject(0)).setItem(COSName.CID_TO_GID_MAP, stream);
+        });
+
+        try (LogCapture logs = LogCapture.of(SystemFontUnicodeRecovery.class)) {
+            PDFExtraction extraction = extractor.extractTextFromPdf(pdf.toString(), 0);
+
+            assertThat(extraction.pages().getFirst().text()).contains("ANR-15-CE23-0001");
+            assertThat(logs.messages(Level.WARN)).singleElement().asString().contains("CIDToGIDMap");
+        }
     }
 
     @Test

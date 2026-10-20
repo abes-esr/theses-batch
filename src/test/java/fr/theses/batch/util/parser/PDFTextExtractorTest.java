@@ -38,6 +38,7 @@ class PDFTextExtractorTest {
         assertThat(extraction.pages()).extracting(PDFTextExtractor.PDFPage::pageNumber).containsExactly(1, 2, 3);
         assertThat(extraction.pages().get(1).text()).contains("Page deux");
         assertThat(extraction.totalPages()).isEqualTo(3);
+        assertThat(extraction.fileSize()).isEqualTo(Files.size(pdf));
     }
 
     @Test

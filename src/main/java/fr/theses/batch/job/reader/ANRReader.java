@@ -2,6 +2,7 @@ package fr.theses.batch.job.reader;
 
 import fr.theses.batch.business.anr.model.dto.ANRMatchDTO;
 import fr.theses.batch.business.anr.service.ANRSearchService;
+import fr.theses.batch.util.date.DateUtils;
 import fr.theses.batch.util.file.PdfFileScanner;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.batch.infrastructure.item.ItemReader;
@@ -137,8 +138,8 @@ public class ANRReader implements ItemReader<ANRMatchDTO> {
                 .sorted()
                 .toList();
 
-        log.info("Nombre de fichiers PDF trouvés : {} (parcours en {} ms, {} threads)",
-                pdfFiles.size(), (System.nanoTime() - start) / 1_000_000, scanThreads);
+        log.info("Nombre de fichiers PDF trouvés : {} (parcours en {}, {} threads)",
+                pdfFiles.size(), DateUtils.formatDuration(System.nanoTime() - start), scanThreads);
 
         return pdfFiles;
     }

@@ -51,6 +51,18 @@ class ANRCsvWriterTest {
     }
 
     @Test
+    void surrogateIsole_remplaceSansFaireEchouerLEcriture() throws Exception {
+        // Demi-paire UTF-16 sortie d'une table /ToUnicode : non encodable en UTF-8, a fait planter la prod
+        ANRPageMatchDTO page = new ANRPageMatchDTO(1, "ANR-1", "x\uD835", "\uDC65y 𝑥");
+
+        writer("preceding_context,following_context").write(Chunk.of(item("a.pdf", List.of(page), null, null)));
+
+        assertThat(Files.readAllLines(csv("unknown"), StandardCharsets.UTF_8)).containsExactly(
+                "preceding_context,following_context",
+                "\"x�\",\"�y 𝑥\"");
+    }
+
+    @Test
     void ligneSansCorrespondance_celluleNumeriqueVide() throws Exception {
         writer("file_name,page_number,total_pages").write(Chunk.of(item("a.pdf", List.of(), null, null)));
 

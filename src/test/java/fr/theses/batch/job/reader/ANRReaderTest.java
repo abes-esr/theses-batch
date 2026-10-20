@@ -87,6 +87,30 @@ class ANRReaderTest {
     }
 
     @Test
+    void totalAAtraiter_tientCompteDeLOffsetEtDeMaxFiles() {
+        assertThat(reader(100, 0).getTotalToRead()).isEqualTo(4);
+        assertThat(reader(100, 2).getTotalToRead()).isEqualTo(2);
+        assertThat(reader(3, 1).getTotalToRead()).isEqualTo(2);
+        assertThat(reader(2, 0).getTotalToRead()).isEqualTo(2);
+        assertThat(reader(100, 50).getTotalToRead()).isZero();
+        assertThat(reader(1, 2).getTotalToRead()).isZero();
+    }
+
+    @Test
+    void totalAAtraiter_egalAuNombreDeFichiersLus() throws Exception {
+        ANRReader reader = reader(3, 1);
+
+        assertThat(readAll(reader)).hasSize(reader.getTotalToRead());
+    }
+
+    @Test
+    void totalAAtraiter_avecFichierDeReprise() throws Exception {
+        ANRReader reader = new ANRReader(new ANRSearchService(), inputDir.toString(), "annexe", 100, 0, 4, "b.pdf");
+
+        assertThat(readAll(reader)).hasSize(reader.getTotalToRead());
+    }
+
+    @Test
     void motsClesVides_aucunPdfExclu() throws Exception {
         ANRReader reader = new ANRReader(new ANRSearchService(), inputDir.toString(), "", 100, 0, 4, "");
 

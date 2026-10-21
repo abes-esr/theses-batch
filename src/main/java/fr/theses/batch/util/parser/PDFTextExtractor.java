@@ -64,6 +64,8 @@ public class PDFTextExtractor {
             throw new IOException("File not found: " + filePath, e);
         }
 
+        // Taille connue dès l'ouverture : pas d'appel système de plus
+        long fileSize = input.length();
         try (PDDocument document = Loader.loadPDF(input)) {
             int pageCount = document.getNumberOfPages();
             int pagesToRead = maxPages > 0 ? Math.min(maxPages, pageCount) : pageCount;
@@ -88,7 +90,8 @@ public class PDFTextExtractor {
                 pages.add(new PDFPage(i + 1, text));
             }
 
-            return new PDFExtraction(pages, pageCount, stripper.glyphs, stripper.lostGlyphs, stripper.recoveredGlyphs);
+            return new PDFExtraction(pages, pageCount, stripper.glyphs, stripper.lostGlyphs, stripper.recoveredGlyphs,
+                    fileSize);
         }
     }
 

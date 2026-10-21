@@ -14,11 +14,11 @@ import org.springframework.stereotype.Component;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.LongSupplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -51,9 +51,20 @@ public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
         this.inputPath = Path.of(inputDir).toAbsolutePath().normalize();
     }
 
+    /**
+     * Au-delà de cette durée, un fichier sans rien d'autre à signaler est tout de même journalisé en
+     * INFO : un fichier lent retient tout son chunk, les autres threads l'attendant pour finir.
+     */
+    static final Duration SLOW_FILE = Duration.ofSeconds(10);
+
+    /**
+     * Horloge en nanosecondes, remplaçable en test
+     */
+    private LongSupplier nanoClock = System::nanoTime;
+
     @Override
     public ANRMatchDTO process(ANRMatchDTO item) throws Exception {
-        Instant startTime = Instant.now();
+        long startNanos = nanoClock.getAsLong();
         PdfWarningCollector.start();
         PDFExtraction extraction = null;
 
@@ -94,29 +105,33 @@ public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
                 return null;
             }
 
-            // Calculer la durée
-            Duration processingDuration = Duration.between(startTime, Instant.now());
-
             // Mettre à jour le DTO
             return item
                     .withPageMatches(pageMatches)
                     .withPagesAnalyzed(pages.size())
                     .withTotalPages(extraction.totalPages())
-                    .withProcessingTime(processingDuration.toMillis() / 1000.0);
+                    .withProcessingTime(seconds(nanoClock.getAsLong() - startNanos));
 
         } catch (Exception e) {
             // Capturer TOUTE exception (PDF malformé = problème de données, pas bug)
             // Retourner un DTO avec error_message au lieu de propager
-            Duration processingDuration = Duration.between(startTime, Instant.now());
             String filePath = item.filePath();
-            log.warn("Erreur lors du traitement du fichier {} (PDF malformé) : {}", 
+            log.warn("Erreur lors du traitement du fichier {} (PDF malformé) : {}",
                    relativeToInputDir(filePath), e.getMessage(), e);
             return item
-                    .withProcessingTime(processingDuration.toMillis() / 1000.0)
+                    .withProcessingTime(seconds(nanoClock.getAsLong() - startNanos))
                     .withErrorMessage("Erreur PDF: " + e.getMessage());
         } finally {
-            logExtractionSummary(relativeToInputDir(item.filePath()), extraction);
+            logExtractionSummary(relativeToInputDir(item.filePath()), extraction,
+                    nanoClock.getAsLong() - startNanos);
         }
+    }
+
+    /**
+     * Durée en secondes, à la milliseconde près
+     */
+    private static double seconds(long nanos) {
+        return Math.round(nanos / 1e6) / 1000.0;
     }
 
     /**
@@ -131,24 +146,34 @@ public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
     }
 
     /**
-     * Journalise en un seul message la qualité de l'extraction de ce fichier : part du texte perdu
-     * (glyphes sans caractère Unicode), part reconstituée via les polices système, et avertissements
-     * PDFBox / FontBox regroupés par type, triés par nombre décroissant.
-     * Rien n'est écrit si l'extraction est complète et sans avertissement ; un fichier dont le texte a été
-     * entièrement reconstitué est signalé en INFO.
+     * Journalise en un seul message le coût et la qualité de l'extraction de ce fichier : durée de
+     * traitement, taille, pages lues sur le total, part du texte perdu (glyphes sans caractère
+     * Unicode), part reconstituée via les polices système, et avertissements PDFBox / FontBox
+     * regroupés par type, triés par nombre décroissant.
+     * Texte perdu ou avertissement : WARN. Texte reconstitué, ou fichier plus lent que SLOW_FILE :
+     * INFO. Sinon DEBUG (--logging.level.fr.theses.batch.job.processor.ANRProcessor=DEBUG pour avoir
+     * la durée et la taille de chaque fichier).
      *
      * @param relativePath Chemin du fichier relatif à app.anr.input-dir
      * @param extraction   Résultat de l'extraction, null si le fichier n'a pas pu être lu
+     * @param elapsedNanos Durée de traitement du fichier
      */
-    private void logExtractionSummary(String relativePath, PDFExtraction extraction) {
+    private void logExtractionSummary(String relativePath, PDFExtraction extraction, long elapsedNanos) {
         Map<String, Integer> warnings = PdfWarningCollector.stop();
         boolean lost = extraction != null && extraction.lostGlyphs() > 0;
         boolean recovered = extraction != null && extraction.recoveredGlyphs() > 0;
-        if (warnings.isEmpty() && !lost && !recovered) {
+        boolean slow = elapsedNanos >= SLOW_FILE.toNanos();
+        if (warnings.isEmpty() && !lost && !recovered && !slow && !log.isDebugEnabled()) {
             return;
         }
 
-        StringBuilder message = new StringBuilder(relativePath);
+        StringBuilder message = new StringBuilder(relativePath)
+                .append(String.format(Locale.FRANCE, " (%.1f s", elapsedNanos / 1e9));
+        if (extraction != null) {
+            message.append(String.format(Locale.FRANCE, ", %.1f Mo, %d/%d pages",
+                    extraction.fileSize() / 1_048_576.0, extraction.pages().size(), extraction.totalPages()));
+        }
+        message.append(')');
         if (extraction != null) {
             message.append(String.format(Locale.FRANCE, " : texte perdu %s (%d/%d glyphes)",
                     formatPercent(extraction.lostPercent()), extraction.lostGlyphs(), extraction.glyphs()));
@@ -167,8 +192,10 @@ public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
 
         if (lost || !warnings.isEmpty()) {
             log.warn("{}", message);
-        } else {
+        } else if (recovered || slow) {
             log.info("{}", message);
+        } else {
+            log.debug("{}", message);
         }
     }
 

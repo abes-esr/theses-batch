@@ -120,12 +120,52 @@ class ANRProgressListenerTest {
         assertThat(listener.afterStep(stepExecution)).isEqualTo(ExitStatus.COMPLETED);
     }
 
+    /**
+     * Lit n fichiers puis écrit un chunk à l'instant donné
+     */
+    private void chunk(ANRProgressListener listener, int n, long at) {
+        for (int i = 0; i < n; i++) {
+            listener.afterRead(item(null));
+        }
+        clock.set(at);
+        listener.afterWrite(new Chunk<>());
+    }
+
     @Test
-    void formatDuration_alaSecondeSousLHeure_alaMinuteAuDela() {
-        assertThat(ANRProgressListener.formatDuration(0)).isEqualTo("0 s");
-        assertThat(ANRProgressListener.formatDuration(59 * SECOND)).isEqualTo("59 s");
-        assertThat(ANRProgressListener.formatDuration(125 * SECOND)).isEqualTo("2 min 5 s");
-        assertThat(ANRProgressListener.formatDuration((3600 + 28 * 60 + 40) * SECOND)).isEqualTo("1 h 28 min");
-        assertThat(ANRProgressListener.formatDuration(-SECOND)).isEqualTo("0 s");
+    void debitSurLaFenetreGlissante_etMoyenneDepuisLeDebut() {
+        when(reader.getTotalToRead()).thenReturn(10_000);
+        ANRProgressListener listener = listener(Duration.ZERO);
+        long window = ANRProgressListener.RATE_WINDOW.toSeconds();
+        // Départ rapide : 2000 fichiers la première minute, puis 1 fichier/s
+        chunk(listener, 2000, 60 * SECOND);
+        for (long t = 70; t <= 60 + window; t += 10) {
+            chunk(listener, 10, t * SECOND);
+        }
+
+        // Fenêtre [60 s, 360 s] : 300 fichiers en 300 s ; moyenne : 2300 en 360 s
+        assertThat(listener.progressMessage(clock.get())).endsWith(
+                "— 1,0 fichiers/s sur 5 min 0 s (moy. 6,4) — reste ≈ 2 h 8 min");
+    }
+
+    @Test
+    void stepPlusCourtQueLaFenetre_pasDeMoyenneSeparee() {
+        ANRProgressListener listener = listener(Duration.ZERO);
+        chunk(listener, 3, SECOND);
+        chunk(listener, 3, 2 * SECOND);
+
+        assertThat(listener.progressMessage(clock.get())).endsWith("— 3,0 fichiers/s — reste ≈ 1 s");
+    }
+
+    @Test
+    void aucunChunkDansLaFenetre_debitDepuisLeDernierReleve() {
+        when(reader.getTotalToRead()).thenReturn(1000);
+        ANRProgressListener listener = listener(Duration.ZERO);
+        chunk(listener, 50, 10 * SECOND);
+        // Dix minutes sans chunk terminé (fichier très lent), puis 100 fichiers
+        chunk(listener, 100, 610 * SECOND);
+
+        // Référence : relevé de 10 s, le seul antérieur à la fenêtre → 100 fichiers en 600 s
+        assertThat(listener.progressMessage(clock.get())).endsWith(
+                "— 0,2 fichiers/s sur 10 min 0 s (moy. 0,2) — reste ≈ 1 h 25 min");
     }
 }

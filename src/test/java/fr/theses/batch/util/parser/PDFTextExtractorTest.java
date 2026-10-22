@@ -6,8 +6,12 @@ import org.apache.logging.log4j.Level;
 import org.apache.pdfbox.cos.COSDictionary;
 import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.cos.COSStream;
+import org.apache.pdfbox.io.RandomAccessRead;
+import org.apache.pdfbox.io.RandomAccessReadBuffer;
+import org.apache.pdfbox.io.RandomAccessReadBufferedFile;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.springframework.util.unit.DataSize;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -111,6 +115,40 @@ class PDFTextExtractorTest {
             assertThat(extraction.pages().getFirst().text()).contains("ANR-15-CE23-0001");
             assertThat(logs.messages(Level.WARN)).singleElement().asString().contains("CIDToGIDMap");
         }
+    }
+
+    @Test
+    void sousLeSeuil_lueEnMemoire_auDela_lueParPages() throws IOException {
+        Path pdf = TestPdfs.create(tempDir.resolve("a.pdf"), "Page un");
+        long size = Files.size(pdf);
+        SystemFontUnicodeRecovery recovery = new SystemFontUnicodeRecovery(new SystemFontIndex());
+
+        try (RandomAccessRead input = new PDFTextExtractor(recovery, DataSize.ofBytes(size)).open(pdf.toString())) {
+            assertThat(input).isInstanceOf(RandomAccessReadBuffer.class);
+            assertThat(input.length()).isEqualTo(size);
+        }
+        try (RandomAccessRead input = new PDFTextExtractor(recovery, DataSize.ofBytes(size - 1)).open(pdf.toString())) {
+            assertThat(input).isInstanceOf(RandomAccessReadBufferedFile.class);
+        }
+        try (RandomAccessRead input = new PDFTextExtractor(recovery, DataSize.ofBytes(0)).open(pdf.toString())) {
+            assertThat(input).isInstanceOf(RandomAccessReadBufferedFile.class);
+        }
+    }
+
+    @Test
+    void enMemoireOuParPages_memeExtraction() throws IOException {
+        String[] pages = new String[400];
+        for (int i = 0; i < pages.length; i++) {
+            pages[i] = "Page " + i + " ANR-" + i + "-ABCD " + "x".repeat(60);
+        }
+        Path pdf = TestPdfs.create(tempDir.resolve("gros.pdf"), pages);
+        SystemFontUnicodeRecovery recovery = new SystemFontUnicodeRecovery(new SystemFontIndex());
+
+        PDFExtraction inMemory = new PDFTextExtractor(recovery, DataSize.ofGigabytes(1)).extractTextFromPdf(pdf.toString(), 0);
+        PDFExtraction byPages = new PDFTextExtractor(recovery, DataSize.ofBytes(0)).extractTextFromPdf(pdf.toString(), 0);
+
+        assertThat(inMemory).isEqualTo(byPages);
+        assertThat(inMemory.pages()).hasSize(400);
     }
 
     @Test

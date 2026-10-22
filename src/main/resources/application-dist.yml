@@ -49,6 +49,11 @@ app:
     # Intervalle minimal entre deux lignes « Progression » dans le log (fichiers traités / total,
     # correspondances, erreurs, débit, temps restant), vérifié après chaque chunk. 0 = à chaque chunk.
     progress-interval: ${THESES_BATCH_ANR_PROGRESS_INTERVAL:30s}
+    # Taille maximale d'un PDF lu en entier en mémoire, par gros blocs séquentiels, avant l'analyse.
+    # Sur NFS, c'est bien moins d'allers-retours avec le serveur que la lecture par pages de 4 ko de
+    # PDFBox. Au-delà, le PDF est lu par pages sans être chargé. Heap : jusqu'à process-threads × cette
+    # taille en plus dans le pire cas (16 × 64 Mo = 1 Go). 0 = jamais en mémoire.
+    in-memory-max-size: ${THESES_BATCH_ANR_IN_MEMORY_MAX_SIZE:64MB}
     # Polices TrueType (.ttf / .ttc) servant à reconstituer le texte des PDF dont les polices
     # n'ont pas de correspondance Unicode (PDF Word : Times New Roman, Arial, Calibri...).
     # Vide = désactivé. Windows : C:/Windows/Fonts ; Linux : /usr/share/fonts

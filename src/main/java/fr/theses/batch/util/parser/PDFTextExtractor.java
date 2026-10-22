@@ -3,18 +3,26 @@ package fr.theses.batch.util.parser;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.cos.COSDictionary;
+import org.apache.pdfbox.io.RandomAccessRead;
+import org.apache.pdfbox.io.RandomAccessReadBuffer;
 import org.apache.pdfbox.io.RandomAccessReadBufferedFile;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.font.PDFont;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.apache.pdfbox.util.Matrix;
 import org.apache.pdfbox.util.Vector;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.util.unit.DataSize;
 
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.file.NoSuchFileException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -29,10 +37,33 @@ import java.util.Set;
 @Slf4j
 public class PDFTextExtractor {
 
+    /** Valeur par défaut de app.anr.in-memory-max-size */
+    static final DataSize DEFAULT_IN_MEMORY_MAX_SIZE = DataSize.ofMegabytes(64);
+
+    /**
+     * Taille des lectures d'un PDF chargé en mémoire. Le JDK fait passer chaque lecture par un
+     * tampon direct de cette taille qu'il garde ensuite pour le thread : lire le fichier d'un seul
+     * appel en garderait un de la taille du plus gros PDF lu, par thread.
+     */
+    static final int READ_BLOCK_SIZE = 1 << 20;
+
     private final SystemFontUnicodeRecovery unicodeRecovery;
+    private final long inMemoryMaxBytes;
 
     public PDFTextExtractor(SystemFontUnicodeRecovery unicodeRecovery) {
+        this(unicodeRecovery, DEFAULT_IN_MEMORY_MAX_SIZE);
+    }
+
+    /**
+     * @param inMemoryMaxSize Taille maximale d'un PDF lu en entier en mémoire avant l'analyse ;
+     *                        au-delà (ou avec 0), il est lu par pages de 4 ko au fil de l'analyse
+     */
+    @Autowired
+    public PDFTextExtractor(SystemFontUnicodeRecovery unicodeRecovery,
+                            @Value("${app.anr.in-memory-max-size:64MB}") DataSize inMemoryMaxSize) {
         this.unicodeRecovery = unicodeRecovery;
+        // Un tableau Java ne dépasse pas 2 Go
+        this.inMemoryMaxBytes = Math.min(inMemoryMaxSize.toBytes(), Integer.MAX_VALUE - 8);
     }
 
     /**
@@ -55,16 +86,7 @@ public class PDFTextExtractor {
             throw new IOException("File not found: null");
         }
 
-        // Pas de File.exists() préalable : l'ouverture signale déjà un fichier absent, et sur NFS
-        // chaque appel système de plus coûte un aller-retour avec le serveur
-        RandomAccessReadBufferedFile input;
-        try {
-            input = new RandomAccessReadBufferedFile(new File(filePath));
-        } catch (NoSuchFileException | FileNotFoundException e) {
-            throw new IOException("File not found: " + filePath, e);
-        }
-
-        // Taille connue dès l'ouverture : pas d'appel système de plus
+        RandomAccessRead input = open(filePath);
         long fileSize = input.length();
         try (PDDocument document = Loader.loadPDF(input)) {
             int pageCount = document.getNumberOfPages();
@@ -93,6 +115,45 @@ public class PDFTextExtractor {
             return new PDFExtraction(pages, pageCount, stripper.glyphs, stripper.lostGlyphs, stripper.recoveredGlyphs,
                     fileSize);
         }
+    }
+
+    /**
+     * Ouvre le PDF pour PDFBox. Jusqu'à app.anr.in-memory-max-size, il est lu en entier, du début
+     * à la fin, par blocs de {@link #READ_BLOCK_SIZE} : sur NFS, le client envoie alors des requêtes
+     * de taille maximale (rsize) et lit en avance, alors que PDFBox, qui saute d'un objet à l'autre
+     * par pages de 4 ko, coûte un aller-retour avec le serveur presque à chaque page. Au-delà, le
+     * fichier est lu par pages au fil de l'analyse, sans être chargé en mémoire.
+     * <p>
+     * Pas de File.exists() préalable : l'ouverture signale déjà un fichier absent, et sur NFS
+     * chaque appel système de plus coûte un aller-retour avec le serveur. La taille est celle du
+     * fichier déjà ouvert.
+     */
+    RandomAccessRead open(String filePath) throws IOException {
+        try {
+            try (FileChannel channel = FileChannel.open(Path.of(filePath))) {
+                long size = channel.size();
+                if (size <= inMemoryMaxBytes) {
+                    return new RandomAccessReadBuffer(readFully(channel, (int) size, filePath));
+                }
+            }
+            return new RandomAccessReadBufferedFile(new File(filePath));
+        } catch (NoSuchFileException | FileNotFoundException e) {
+            throw new IOException("File not found: " + filePath, e);
+        }
+    }
+
+    private static byte[] readFully(FileChannel channel, int size, String filePath) throws IOException {
+        byte[] content = new byte[size];
+        int position = 0;
+        while (position < size) {
+            int read = channel.read(ByteBuffer.wrap(content, position, Math.min(READ_BLOCK_SIZE, size - position)));
+            if (read < 0) {
+                throw new IOException("Fichier raccourci pendant sa lecture (" + position + " octets sur " + size
+                        + ") : " + filePath);
+            }
+            position += read;
+        }
+        return content;
     }
 
     /**

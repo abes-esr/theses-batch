@@ -2,6 +2,7 @@ package fr.theses.batch.job.processor;
 
 import fr.theses.batch.business.anr.model.dto.ANRMatchDTO;
 import fr.theses.batch.business.anr.model.dto.ANRPageMatchDTO;
+import fr.theses.batch.util.log.BenignPdfWarnings;
 import fr.theses.batch.util.log.PdfWarningCollector;
 import fr.theses.batch.util.parser.PDFExtraction;
 import fr.theses.batch.util.parser.PDFTextExtractor;
@@ -21,6 +22,8 @@ import java.util.Map;
 import java.util.function.LongSupplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Processor pour le traitement ANR
@@ -115,8 +118,10 @@ public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
         } catch (Exception e) {
             // Capturer TOUTE exception (PDF malformé = problème de données, pas bug)
             // Retourner un DTO avec error_message au lieu de propager
+            // Le message suffit pour un fichier corrompu ; la pile (≈ 30 lignes) seulement en DEBUG
             log.warn("Erreur lors du traitement du fichier {} (PDF malformé) : {}",
-                   relativeToInputDir(item.filePath()), e.getMessage(), e);
+                    relativeToInputDir(item.filePath()), e.getMessage());
+            log.debug("Pile de l'erreur pour {}", relativeToInputDir(item.filePath()), e);
             return withError(item, e.getMessage(), startNanos);
         } catch (StackOverflowError e) {
             // PDFBox récurse sans fin sur certains PDF (ex. PDPage.removeResources en 3.0.8, ressources de
@@ -163,10 +168,16 @@ public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
      * Journalise en un seul message le coût et la qualité de l'extraction de ce fichier : durée de
      * traitement, taille, pages lues sur le total, part du texte perdu (glyphes sans caractère
      * Unicode), part reconstituée via les polices système, et avertissements PDFBox / FontBox
-     * regroupés par type, triés par nombre décroissant.
-     * Texte perdu ou avertissement : WARN. Texte reconstitué, ou fichier plus lent que SLOW_FILE :
-     * INFO. Sinon DEBUG (--logging.level.fr.theses.batch.job.processor.ANRProcessor=DEBUG pour avoir
-     * la durée et la taille de chaque fichier).
+     * regroupés par type : d'abord ceux qui peuvent affecter le texte, puis les bénins
+     * ({@link BenignPdfWarnings}, ex. remplacement d'une police simple non embarquée), chaque groupe
+     * trié par nombre décroissant ; l'en-tête les distingue, ex. « 3 avertissement(s) PDFBox
+     * (+ 12 bénin(s)) : ».
+     * <p>
+     * Niveau : WARN s'il y a du texte perdu ou au moins un avertissement non bénin. Sinon INFO si du
+     * texte a été reconstitué ou si le fichier est plus lent que SLOW_FILE, DEBUG dans les autres cas
+     * (--logging.level.fr.theses.batch.job.processor.ANRProcessor=DEBUG pour avoir la durée et la
+     * taille de chaque fichier). Des avertissements bénins seuls n'imposent donc aucun niveau, mais
+     * figurent dans la ligne dès qu'elle est écrite.
      *
      * @param relativePath Chemin du fichier relatif à app.anr.input-dir
      * @param extraction   Résultat de l'extraction, null si le fichier n'a pas pu être lu
@@ -177,7 +188,12 @@ public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
         boolean lost = extraction != null && extraction.lostGlyphs() > 0;
         boolean recovered = extraction != null && extraction.recoveredGlyphs() > 0;
         boolean slow = elapsedNanos >= SLOW_FILE.toNanos();
-        if (warnings.isEmpty() && !lost && !recovered && !slow && !log.isDebugEnabled()) {
+        Map<Boolean, List<Map.Entry<String, Integer>>> byBenign = warnings.entrySet().stream()
+                .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
+                .collect(Collectors.partitioningBy(e -> BenignPdfWarnings.isBenign(e.getKey())));
+        List<Map.Entry<String, Integer>> harmful = byBenign.get(false);
+        List<Map.Entry<String, Integer>> benign = byBenign.get(true);
+        if (harmful.isEmpty() && !lost && !recovered && !slow && !log.isDebugEnabled()) {
             return;
         }
 
@@ -197,20 +213,32 @@ public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
                     .append(" via les polices système");
         }
         if (!warnings.isEmpty()) {
-            int total = warnings.values().stream().mapToInt(Integer::intValue).sum();
-            message.append(", ").append(total).append(" avertissement(s) PDFBox :");
-            warnings.entrySet().stream()
-                    .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
+            int harmfulTotal = total(harmful);
+            int benignTotal = total(benign);
+            message.append(", ");
+            if (harmfulTotal == 0) {
+                message.append(benignTotal).append(" avertissement(s) PDFBox bénin(s) :");
+            } else if (benignTotal == 0) {
+                message.append(harmfulTotal).append(" avertissement(s) PDFBox :");
+            } else {
+                message.append(harmfulTotal).append(" avertissement(s) PDFBox (+ ")
+                        .append(benignTotal).append(" bénin(s)) :");
+            }
+            Stream.concat(harmful.stream(), benign.stream())
                     .forEach(e -> message.append(String.format("%n    %5d x %s", e.getValue(), e.getKey())));
         }
 
-        if (lost || !warnings.isEmpty()) {
+        if (lost || !harmful.isEmpty()) {
             log.warn("{}", message);
         } else if (recovered || slow) {
             log.info("{}", message);
         } else {
             log.debug("{}", message);
         }
+    }
+
+    private static int total(List<Map.Entry<String, Integer>> warnings) {
+        return warnings.stream().mapToInt(Map.Entry::getValue).sum();
     }
 
     /**

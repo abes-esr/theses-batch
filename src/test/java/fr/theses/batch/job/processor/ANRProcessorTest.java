@@ -158,6 +158,23 @@ class ANRProcessorTest {
     }
 
     @Test
+    void debordementDePile_renseigneLeMessageSansFaireEchouerLeStep() throws Exception {
+        // PDFBox 3.0.8 (PDPage.removeResources) récurse sans fin sur certains PDF : le StackOverflowError,
+        // une Error et non une Exception, a fait échouer le step en prod après 5 h 28 min
+        PDFTextExtractor extractor = mock(PDFTextExtractor.class);
+        when(extractor.extractTextFromPdf(anyString(), anyInt())).thenThrow(new StackOverflowError());
+
+        try (LogCapture logs = LogCapture.of(ANRProcessor.class)) {
+            ANRMatchDTO result = processor(extractor, 50, 5).process(item(inputDir.resolve("x.pdf")));
+
+            assertThat(result.errorMessage()).isEqualTo("Erreur PDF: débordement de pile (StackOverflowError)");
+            assertThat(result.pageMatches()).isNullOrEmpty();
+            assertThat(logs.messages(Level.WARN).getFirst())
+                    .isEqualTo("Erreur lors du traitement du fichier x.pdf (PDF malformé) : débordement de pile (StackOverflowError)");
+        }
+    }
+
+    @Test
     void fichierHorsInputDir_estAccepte() throws Exception {
         Path ailleurs = inputDir.getParent().resolve("hors-input-" + System.nanoTime() + ".pdf");
 

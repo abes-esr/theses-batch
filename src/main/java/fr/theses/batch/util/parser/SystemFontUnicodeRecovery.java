@@ -15,7 +15,6 @@ import org.apache.pdfbox.pdmodel.font.PDFont;
 import org.apache.pdfbox.pdmodel.font.PDSimpleFont;
 import org.apache.pdfbox.pdmodel.font.PDType0Font;
 import org.apache.pdfbox.pdmodel.font.encoding.Encoding;
-import org.apache.pdfbox.pdmodel.graphics.form.PDFormXObject;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -115,13 +114,16 @@ public class SystemFontUnicodeRecovery {
                 log.debug("Police {} ignorée : {}", name.getName(), e.getMessage());
             }
         }
+        // Formulaires lus au niveau COS, sans resources.getXObject() qui les mettrait en cache : après
+        // chaque page, PDPage.removeResources retire du cache chaque formulaire puis descend dans ses
+        // ressources, un niveau de récursion par formulaire en cache. Quand les formulaires partagent les
+        // ressources de la page (5 859 dans un PDF de prod), la pile déborde.
+        COSDictionary xObjects = resources.getCOSObject().getCOSDictionary(COSName.XOBJECT);
         for (COSName name : resources.getXObjectNames()) {
-            try {
-                if (resources.getXObject(name) instanceof PDFormXObject form) {
-                    scan(form.getResources(), visited, recovered);
-                }
-            } catch (IOException | IllegalStateException e) {
-                log.debug("XObject {} ignoré : {}", name.getName(), e.getMessage());
+            if (xObjects.getDictionaryObject(name) instanceof COSStream stream
+                    && COSName.FORM.equals(stream.getCOSName(COSName.SUBTYPE))
+                    && stream.getCOSDictionary(COSName.RESOURCES) instanceof COSDictionary formResources) {
+                scan(new PDResources(formResources, resources.getResourceCache()), visited, recovered);
             }
         }
     }

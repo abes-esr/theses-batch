@@ -115,16 +115,30 @@ public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
         } catch (Exception e) {
             // Capturer TOUTE exception (PDF malformé = problème de données, pas bug)
             // Retourner un DTO avec error_message au lieu de propager
-            String filePath = item.filePath();
             log.warn("Erreur lors du traitement du fichier {} (PDF malformé) : {}",
-                   relativeToInputDir(filePath), e.getMessage(), e);
-            return item
-                    .withProcessingTime(seconds(nanoClock.getAsLong() - startNanos))
-                    .withErrorMessage("Erreur PDF: " + e.getMessage());
+                   relativeToInputDir(item.filePath()), e.getMessage(), e);
+            return withError(item, e.getMessage(), startNanos);
+        } catch (StackOverflowError e) {
+            // PDFBox récurse sans fin sur certains PDF (ex. PDPage.removeResources en 3.0.8, ressources de
+            // formulaires imbriquées) : une Error, qui ferait échouer tout le step. La pile est déroulée et
+            // le document n'est utilisé que par ce thread, on peut continuer. Trace omise : 1 024 frames identiques.
+            String message = "débordement de pile (StackOverflowError)";
+            log.warn("Erreur lors du traitement du fichier {} (PDF malformé) : {}",
+                    relativeToInputDir(item.filePath()), message);
+            return withError(item, message, startNanos);
         } finally {
             logExtractionSummary(relativeToInputDir(item.filePath()), extraction,
                     nanoClock.getAsLong() - startNanos);
         }
+    }
+
+    /**
+     * DTO du fichier en erreur, avec sa durée de traitement
+     */
+    private ANRMatchDTO withError(ANRMatchDTO item, String message, long startNanos) {
+        return item
+                .withProcessingTime(seconds(nanoClock.getAsLong() - startNanos))
+                .withErrorMessage("Erreur PDF: " + message);
     }
 
     /**

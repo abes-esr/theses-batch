@@ -36,6 +36,15 @@ app:
     context-characters: ${THESES_BATCH_ANR_CONTEXT_CHARACTERS}
     chunk-size: ${THESES_BATCH_ANR_CHUNK_SIZE}
     exclude-keywords: ${THESES_BATCH_ANR_EXCLUDE_KEYWORDS}
+    # Répertoires exclus du parcours : motifs glob séparés par des virgules, comparés au chemin du
+    # répertoire relatif à input-dir (séparateur « / », sensible à la casse ; * = un nom ou une partie,
+    # ? = un caractère, ** = un nombre quelconque de niveaux). Le parcours ne descend pas dans un
+    # répertoire exclu : aucun de ses fichiers n'est listé ni traité. Vide = aucun répertoire exclu.
+    # Exemple : */*/temp exclut le temp/ de chaque thèse (ETAB/THESE_x/temp), y compris pour les thèses
+    # qui n'ont pas de document/ (≈ 0,15 % des thèses, dont les correspondances sont alors perdues).
+    # ATTENTION : toute exclusion change la liste triée des fichiers ; les valeurs d'offset et de
+    # max-files d'un run fait avec une autre valeur de cette clé ne désignent plus les mêmes fichiers.
+    exclude-dirs: ${THESES_BATCH_ANR_EXCLUDE_DIRS:}
     # Nombre de répertoires listés simultanément lors du parcours de input-dir.
     # Sur un partage réseau (NFS), le parcours attend surtout le serveur : 8 à 32 recouvrent ces attentes.
     scan-threads: ${THESES_BATCH_ANR_SCAN_THREADS:8}

@@ -41,9 +41,26 @@ public final class PdfFileScanner {
      * @throws IOException Si un répertoire ne peut pas être lu
      */
     public static List<Path> scan(Path root, Predicate<String> fileNameFilter, int threads) throws IOException {
+        return scan(root, directory -> true, fileNameFilter, threads);
+    }
+
+    /**
+     * Liste les fichiers réguliers de l'arborescence dont le nom satisfait le filtre, sans descendre
+     * dans les répertoires refusés par le filtre de répertoires : leur contenu n'est jamais listé.
+     *
+     * @param root            Répertoire racine (toujours parcouru)
+     * @param directoryFilter Filtre sur le chemin du sous-répertoire relatif à la racine, séparateur
+     *                        {@code /} quel que soit le système ; false = ne pas y descendre
+     * @param fileNameFilter  Filtre sur le nom du fichier (sans le chemin)
+     * @param threads         Nombre de répertoires listés simultanément
+     * @return Chemins trouvés, dans un ordre quelconque
+     * @throws IOException Si un répertoire ne peut pas être lu
+     */
+    public static List<Path> scan(Path root, Predicate<String> directoryFilter, Predicate<String> fileNameFilter,
+                                  int threads) throws IOException {
         Queue<Path> found = new ConcurrentLinkedQueue<>();
         try (ForkJoinPool pool = new ForkJoinPool(Math.max(1, threads))) {
-            pool.invoke(new DirectoryTask(root, fileNameFilter, found));
+            pool.invoke(new DirectoryTask(root, "", directoryFilter, fileNameFilter, found));
         } catch (RuntimeException e) {
             throw unwrapIOException(e);
         }
@@ -68,11 +85,17 @@ public final class PdfFileScanner {
     private static final class DirectoryTask extends RecursiveAction {
 
         private final Path directory;
+        /** Chemin relatif à la racine, séparateur « / » ; vide pour la racine */
+        private final String relativePath;
+        private final Predicate<String> directoryFilter;
         private final Predicate<String> fileNameFilter;
         private final Queue<Path> found;
 
-        private DirectoryTask(Path directory, Predicate<String> fileNameFilter, Queue<Path> found) {
+        private DirectoryTask(Path directory, String relativePath, Predicate<String> directoryFilter,
+                              Predicate<String> fileNameFilter, Queue<Path> found) {
             this.directory = directory;
+            this.relativePath = relativePath;
+            this.directoryFilter = directoryFilter;
             this.fileNameFilter = fileNameFilter;
             this.found = found;
         }
@@ -85,7 +108,11 @@ public final class PdfFileScanner {
                     BasicFileAttributes attributes =
                             Files.readAttributes(entry, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
                     if (attributes.isDirectory()) {
-                        subdirectories.add(new DirectoryTask(entry, fileNameFilter, found));
+                        String name = entry.getFileName().toString();
+                        String subPath = relativePath.isEmpty() ? name : relativePath + "/" + name;
+                        if (directoryFilter.test(subPath)) {
+                            subdirectories.add(new DirectoryTask(entry, subPath, directoryFilter, fileNameFilter, found));
+                        }
                     } else if (fileNameFilter.test(entry.getFileName().toString())
                             && isRegularFile(entry, attributes)) {
                         found.add(entry);

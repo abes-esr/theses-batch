@@ -57,6 +57,8 @@ class ANRJobIntegrationTest {
         registry.add("app.anr.context-characters", () -> "8");
         registry.add("app.anr.chunk-size", () -> "4");
         registry.add("app.anr.exclude-keywords", () -> "annexe");
+        // vide : comportement par défaut, aucun répertoire exclu
+        registry.add("app.anr.exclude-dirs", () -> "");
         registry.add("app.anr.scan-threads", () -> "2");
         // plusieurs threads de traitement : les lignes doivent malgré tout suivre l'ordre des chemins
         registry.add("app.anr.process-threads", () -> "4");

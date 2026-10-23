@@ -10,6 +10,8 @@ import java.nio.file.Files;
 import java.nio.file.NotDirectoryException;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -53,5 +55,32 @@ class PdfFileScannerTest {
 
         assertThatThrownBy(() -> PdfFileScanner.scan(root.resolve("a.pdf"), name -> true, 2))
                 .isInstanceOf(NotDirectoryException.class);
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {1, 4})
+    void repertoireRefuse_nEstPasParcouru(int threads) throws IOException {
+        creer("ETAB/THESE_1/document/0/0/a.pdf", "ETAB/THESE_1/temp/V4/b.pdf", "ETAB/THESE_1/temp/c.pdf");
+        Queue<String> tested = new ConcurrentLinkedQueue<>();
+
+        List<Path> found = PdfFileScanner.scan(root, directory -> {
+            tested.add(directory);
+            return !directory.endsWith("/temp");
+        }, name -> name.endsWith(".pdf"), threads);
+
+        assertThat(found).containsExactly(root.resolve("ETAB/THESE_1/document/0/0/a.pdf"));
+        // Chemins relatifs à la racine, séparés par « / » ; rien sous temp/ n'est listé
+        assertThat(tested).containsExactlyInAnyOrder(
+                "ETAB", "ETAB/THESE_1", "ETAB/THESE_1/document", "ETAB/THESE_1/document/0",
+                "ETAB/THESE_1/document/0/0", "ETAB/THESE_1/temp");
+    }
+
+    @Test
+    void filtreDeRepertoires_neConcernePasLesFichiersDeLaRacine() throws IOException {
+        creer("a.pdf", "A/b.pdf");
+
+        List<Path> found = PdfFileScanner.scan(root, directory -> false, name -> name.endsWith(".pdf"), 2);
+
+        assertThat(found).containsExactly(root.resolve("a.pdf"));
     }
 }

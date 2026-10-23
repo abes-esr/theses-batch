@@ -21,6 +21,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
+import java.util.concurrent.atomic.LongAdder;
+import java.util.regex.Pattern;
 
 /**
  * Reader pour le traitement ANR
@@ -33,6 +35,8 @@ public class ANRReader implements ItemReader<ANRMatchDTO> {
     private final ANRSearchService anrSearchService;
     private final String inputDir;
     private final List<String> excludeKeywords;
+    private final String excludeDirs;
+    private final List<Pattern> excludeDirPatterns;
     private final int scanThreads;
 
     private Iterator<String> fileIterator;
@@ -49,7 +53,8 @@ public class ANRReader implements ItemReader<ANRMatchDTO> {
                      @Value("${app.anr.max-files:10000}") int maxFiles,
                      @Value("${app.anr.offset:0}") int offset,
                      @Value("${app.anr.scan-threads:8}") int scanThreads,
-                     @Value("${app.anr.start-file:}") String startFile) {
+                     @Value("${app.anr.start-file:}") String startFile,
+                     @Value("${app.anr.exclude-dirs:}") String excludeDirs) {
         this.anrSearchService = anrSearchService;
         this.inputDir = inputDir;
         // Mis en minuscules une fois pour toutes ; une entrée vide exclurait tous les fichiers
@@ -57,13 +62,15 @@ public class ANRReader implements ItemReader<ANRMatchDTO> {
                 .filter(keyword -> !keyword.isEmpty())
                 .map(String::toLowerCase)
                 .toList();
+        this.excludeDirs = excludeDirs;
+        this.excludeDirPatterns = anrSearchService.parseExcludedDirectories(excludeDirs);
         this.maxFiles = maxFiles;
         this.offset = offset;
         this.scanThreads = scanThreads;
         this.startFile = startFile;
 
-        log.info("Initialisation ANRReader avec inputDir={}, maxFiles={}, offset={}, scanThreads={}",
-                inputDir, maxFiles, offset, scanThreads, startFile != null ? startFile : "none");
+        log.info("Initialisation ANRReader avec inputDir={}, maxFiles={}, offset={}, scanThreads={}, excludeDirs={}",
+                inputDir, maxFiles, offset, scanThreads, excludeDirPatterns.isEmpty() ? "aucun" : excludeDirs);
         initializeFileIterator();
     }
 
@@ -131,7 +138,15 @@ public class ANRReader implements ItemReader<ANRMatchDTO> {
 
         // Tri sur la chaîne du chemin absolu, calculée une seule fois : c'est l'ordre auquel s'applique l'offset
         long start = System.nanoTime();
+        LongAdder excludedDirectories = new LongAdder();
         List<String> pdfFiles = PdfFileScanner.scan(inputPath,
+                        directory -> {
+                            if (anrSearchService.shouldExcludeDirectory(directory, excludeDirPatterns)) {
+                                excludedDirectories.increment();
+                                return false;
+                            }
+                            return true;
+                        },
                         name -> !anrSearchService.shouldExcludeFile(name, excludeKeywords), scanThreads)
                 .stream()
                 .map(Path::toString)
@@ -140,6 +155,11 @@ public class ANRReader implements ItemReader<ANRMatchDTO> {
 
         log.info("Nombre de fichiers PDF trouvés : {} (parcours en {}, {} threads)",
                 pdfFiles.size(), DateUtils.formatDuration(System.nanoTime() - start), scanThreads);
+        if (!excludeDirPatterns.isEmpty()) {
+            // La liste triée n'est plus celle d'un run sans exclusion : les offsets ne sont pas transposables
+            log.info("Répertoires exclus (app.anr.exclude-dirs={}) : {}, non parcourus", excludeDirs,
+                    excludedDirectories.sum());
+        }
 
         return pdfFiles;
     }

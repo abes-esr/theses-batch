@@ -175,6 +175,27 @@ class ANRProcessorTest {
     }
 
     @Test
+    void pdfMalforme_messageEnWarnEtPileEnDebugSeulement() throws Exception {
+        IOException erreur = new IOException("illisible");
+        PDFTextExtractor extractor = mock(PDFTextExtractor.class);
+        when(extractor.extractTextFromPdf(anyString(), anyInt())).thenThrow(erreur);
+
+        try (LogCapture logs = LogCapture.of(ANRProcessor.class)) {
+            processor(extractor, 50, 5).process(item(inputDir.resolve("x.pdf")));
+
+            assertThat(logs.events(Level.WARN)).singleElement().satisfies(event -> {
+                assertThat(event.getMessage().getFormattedMessage())
+                        .isEqualTo("Erreur lors du traitement du fichier x.pdf (PDF malformé) : illisible");
+                assertThat(event.getThrown()).isNull();
+            });
+            assertThat(logs.events(Level.DEBUG)).anySatisfy(event -> {
+                assertThat(event.getMessage().getFormattedMessage()).isEqualTo("Pile de l'erreur pour x.pdf");
+                assertThat(event.getThrown()).isSameAs(erreur);
+            });
+        }
+    }
+
+    @Test
     void fichierHorsInputDir_estAccepte() throws Exception {
         Path ailleurs = inputDir.getParent().resolve("hors-input-" + System.nanoTime() + ".pdf");
 
@@ -285,5 +306,90 @@ class ANRProcessorTest {
         }
         // La collecte a été fermée par le processor : plus rien n'est comptabilisé sur ce thread
         assertThat(PdfWarningCollector.stop()).isEmpty();
+    }
+
+    /**
+     * Processor dont l'extracteur émet des avertissements PDFBox puis renvoie l'extraction donnée
+     */
+    private ANRProcessor processorWarning(PDFExtraction extraction, Runnable pdfboxWarnings) throws IOException {
+        PDFTextExtractor extractor = mock(PDFTextExtractor.class);
+        when(extractor.extractTextFromPdf(anyString(), anyInt())).thenAnswer(invocation -> {
+            pdfboxWarnings.run();
+            return extraction;
+        });
+        return processor(extractor, 50, 5);
+    }
+
+    /**
+     * Remplacements de polices simples non embarquées : 2 pour ArialMT, 1 pour Helvetica
+     */
+    private static void fallbackFonts() {
+        var trueType = LogManager.getLogger("org.apache.pdfbox.pdmodel.font.PDTrueTypeFont");
+        trueType.warn("Using fallback font LiberationSans for ArialMT");
+        trueType.warn("Using fallback font LiberationSans for ArialMT");
+        LogManager.getLogger("org.apache.pdfbox.pdmodel.font.PDType1Font")
+                .warn("Using fallback font LiberationSans for base font Helvetica");
+    }
+
+    private static final String ARIAL_FALLBACK = "        2 x WARN PDTrueTypeFont - Using fallback font LiberationSans for ArialMT";
+    private static final String HELVETICA_FALLBACK =
+            "        1 x WARN PDType1Font - Using fallback font LiberationSans for base font Helvetica";
+
+    @Test
+    void avertissementsBeninsSeuls_pasDeWarnMaisLigneComplete() throws Exception {
+        try (LogCapture logs = LogCapture.of(ANRProcessor.class)) {
+            processorWarning(extraction(100, 0, 0), ANRProcessorTest::fallbackFonts)
+                    .process(item(inputDir.resolve("x.pdf")));
+
+            assertThat(logs.messages(Level.WARN)).isEmpty();
+            assertThat(logs.messages(Level.INFO)).isEmpty();
+            assertThat(logs.messages(Level.DEBUG)).containsExactly(String.join(System.lineSeparator(),
+                    "x.pdf (0,0 s, 3,5 Mo, 1/1 pages) : texte perdu 0,0 % (0/100 glyphes), 3 avertissement(s) PDFBox bénin(s) :",
+                    ARIAL_FALLBACK,
+                    HELVETICA_FALLBACK));
+        }
+    }
+
+    @Test
+    void avertissementsBeninsEtTexteReconstitue_resteEnInfo() throws Exception {
+        try (LogCapture logs = LogCapture.of(ANRProcessor.class)) {
+            processorWarning(extraction(100, 0, 100), ANRProcessorTest::fallbackFonts)
+                    .process(item(inputDir.resolve("x.pdf")));
+
+            assertThat(logs.messages(Level.WARN)).isEmpty();
+            assertThat(logs.messages(Level.INFO)).singleElement().asString()
+                    .contains("reconstitué 100,0 % via les polices système, 3 avertissement(s) PDFBox bénin(s) :");
+        }
+    }
+
+    @Test
+    void avertissementsBeninsEtUnNonBenin_signaleEnWarnNonBeninEnTete() throws Exception {
+        try (LogCapture logs = LogCapture.of(ANRProcessor.class)) {
+            processorWarning(extraction(100, 0, 0), () -> {
+                fallbackFonts();
+                // Police CID : PDFBox peut lire les caractères dans la cmap de la police de remplacement
+                LogManager.getLogger("org.apache.pdfbox.pdmodel.font.PDCIDFontType2")
+                        .warn("Using fallback font LiberationSans for CID-keyed TrueType font Calibri");
+            }).process(item(inputDir.resolve("x.pdf")));
+
+            assertThat(logs.messages(Level.WARN)).containsExactly(String.join(System.lineSeparator(),
+                    "x.pdf (0,0 s, 3,5 Mo, 1/1 pages) : texte perdu 0,0 % (0/100 glyphes), 1 avertissement(s) PDFBox (+ 3 bénin(s)) :",
+                    "        1 x WARN PDCIDFontType2 - Using fallback font LiberationSans for CID-keyed TrueType font Calibri",
+                    ARIAL_FALLBACK,
+                    HELVETICA_FALLBACK));
+        }
+    }
+
+    @Test
+    void avertissementsBeninsEtTextePerdu_signaleEnWarn() throws Exception {
+        try (LogCapture logs = LogCapture.of(ANRProcessor.class)) {
+            processorWarning(extraction(200, 50, 0), ANRProcessorTest::fallbackFonts)
+                    .process(item(inputDir.resolve("x.pdf")));
+
+            assertThat(logs.messages(Level.WARN)).containsExactly(String.join(System.lineSeparator(),
+                    "x.pdf (0,0 s, 3,5 Mo, 1/1 pages) : texte perdu 25,0 % (50/200 glyphes), 3 avertissement(s) PDFBox bénin(s) :",
+                    ARIAL_FALLBACK,
+                    HELVETICA_FALLBACK));
+        }
     }
 }

@@ -56,12 +56,30 @@ public class SystemFontIndex {
     /**
      * Police système installée, réduite à ce qu'il faut pour traduire un numéro de glyphe (GID).
      * Les tableaux sont remplis au chargement et ne sont plus modifiés ensuite.
-     *
-     * @param name    Nom PostScript de la police
-     * @param widths  Largeur de chaque glyphe, en millièmes d'em comme les largeurs déclarées dans un PDF
-     * @param unicode Caractère dessiné par chaque glyphe, null si la police ne l'associe à aucun
      */
-    public record SystemFont(String name, float[] widths, String[] unicode) {
+    public static final class SystemFont {
+
+        private final String name;
+        private final float[] widths;
+        private final String[] unicode;
+
+        /**
+         * @param name    Nom PostScript de la police
+         * @param widths  Largeur de chaque glyphe, en millièmes d'em comme les largeurs déclarées dans un PDF
+         * @param unicode Caractère dessiné par chaque glyphe, null si la police ne l'associe à aucun
+         */
+        SystemFont(String name, float[] widths, String[] unicode) {
+            this.name = name;
+            this.widths = widths;
+            this.unicode = unicode;
+        }
+
+        /**
+         * @return le nom PostScript de la police
+         */
+        public String name() {
+            return name;
+        }
 
         /**
          * @return le caractère dessiné par ce glyphe, ou null si la police ne l'associe à aucun
@@ -79,6 +97,11 @@ public class SystemFontIndex {
 
         public int numberOfGlyphs() {
             return widths.length;
+        }
+
+        @Override
+        public String toString() {
+            return "SystemFont[" + name + ", " + widths.length + " glyphes]";
         }
     }
 

@@ -66,6 +66,7 @@ class SystemFontIndexTest {
 
         assertThat(font.name()).isEqualTo(TestPdfs.FONT_NAME);
         assertThat(font.numberOfGlyphs()).isGreaterThan(gidOfA);
+        assertThat(font).hasToString("SystemFont[" + TestPdfs.FONT_NAME + ", " + font.numberOfGlyphs() + " glyphes]");
         assertThat(font.unicodeOf(gidOfA)).isEqualTo("A");
         // .notdef (glyphe 0) n'a pas de caractère
         assertThat(font.unicodeOf(0)).isNull();

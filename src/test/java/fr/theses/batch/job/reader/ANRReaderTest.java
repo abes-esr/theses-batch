@@ -2,7 +2,9 @@ package fr.theses.batch.job.reader;
 
 import fr.theses.batch.business.anr.model.dto.ANRMatchDTO;
 import fr.theses.batch.business.anr.service.ANRSearchService;
+import fr.theses.batch.support.TestPdfs;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.batch.infrastructure.item.NonTransientResourceException;
@@ -37,7 +39,7 @@ class ANRReaderTest {
     }
 
     private ANRReader reader(int maxFiles, int offset) {
-        return new ANRReader(new ANRSearchService(), inputDir.toString(), "annexe,resume", maxFiles, offset, 4, "");
+        return new ANRReader(new ANRSearchService(), inputDir.toString(), "annexe,resume", maxFiles, offset, 4, "", "");
     }
 
     private static List<String> readAll(ANRReader reader) throws Exception {
@@ -105,14 +107,14 @@ class ANRReaderTest {
 
     @Test
     void totalAAtraiter_avecFichierDeReprise() throws Exception {
-        ANRReader reader = new ANRReader(new ANRSearchService(), inputDir.toString(), "annexe", 100, 0, 4, "b.pdf");
+        ANRReader reader = new ANRReader(new ANRSearchService(), inputDir.toString(), "annexe", 100, 0, 4, "b.pdf", "");
 
         assertThat(readAll(reader)).hasSize(reader.getTotalToRead());
     }
 
     @Test
     void motsClesVides_aucunPdfExclu() throws Exception {
-        ANRReader reader = new ANRReader(new ANRSearchService(), inputDir.toString(), "", 100, 0, 4, "");
+        ANRReader reader = new ANRReader(new ANRSearchService(), inputDir.toString(), "", 100, 0, 4, "", "");
 
         assertThat(readAll(reader)).containsExactly("a.PDF", "a_annexe.pdf", "b.pdf", "c.pdf", "racine.pdf");
     }
@@ -121,8 +123,77 @@ class ANRReaderTest {
     void repertoireAbsent_echoueDesLaConstruction() {
         String absent = inputDir.resolve("absent").toString();
 
-        assertThatThrownBy(() -> new ANRReader(new ANRSearchService(), absent, "", 10, 0, 4, ""))
+        assertThatThrownBy(() -> new ANRReader(new ANRSearchService(), absent, "", 10, 0, 4, "", ""))
                 .isInstanceOf(NonTransientResourceException.class)
                 .hasRootCauseInstanceOf(IOException.class);
+    }
+
+    /**
+     * Arborescence de production : ETAB/THESE_x/document/… et ETAB/THESE_x/temp/…
+     */
+    @Nested
+    class ExclusionDeRepertoires {
+
+        @TempDir
+        Path theses;
+
+        @BeforeEach
+        void creerTheses() throws IOException {
+            TestPdfs.create(theses.resolve("ETAB/THESE_1/document/0/0/these.pdf"), "ANR-15-CE23-0001");
+            TestPdfs.create(theses.resolve("ETAB/THESE_1/document/0/1/these_copie.pdf"), "ANR-15-CE23-0001");
+            TestPdfs.create(theses.resolve("ETAB/THESE_1/temp/V4/these_v4.pdf"), "ANR-15-CE23-0001");
+            TestPdfs.create(theses.resolve("ETAB/THESE_1/temp/pdffix_x/pdffix_x.pdf"), "ANR-15-CE23-0001");
+            // Thèse sans document/ : temp/ est sa seule source
+            TestPdfs.create(theses.resolve("ETAB/THESE_2/temp/seule.pdf"), "ANR-16-CE01-0002");
+            // « temp » ailleurs qu'au troisième niveau n'est pas visé par */*/temp
+            TestPdfs.create(theses.resolve("ETAB/THESE_3/document/temp/profond.pdf"), "Texte");
+        }
+
+        private ANRReader reader(String excludeDirs, int offset) {
+            return new ANRReader(new ANRSearchService(), theses.toString(), "", 100, offset, 4, "", excludeDirs);
+        }
+
+        @Test
+        void sansExclusion_litAussiTemp() throws Exception {
+            // Tri sur la chaîne, sensible à la casse : « V4 » passe avant « pdffix_x »
+            assertThat(readAll(reader("", 0))).containsExactly(
+                    "these.pdf", "these_copie.pdf", "these_v4.pdf", "pdffix_x.pdf", "seule.pdf", "profond.pdf");
+        }
+
+        @Test
+        void excluTempDeChaqueThese() throws Exception {
+            assertThat(readAll(reader("*/*/temp", 0))).containsExactly("these.pdf", "these_copie.pdf", "profond.pdf");
+        }
+
+        @Test
+        void theseSansDocument_disparaitEntierement() throws Exception {
+            // Option retenue : temp/ est exclu partout, même quand la thèse n'a rien d'autre
+            ANRReader reader = reader("*/*/temp", 0);
+
+            assertThat(reader.getTotalToRead()).isEqualTo(3);
+            assertThat(readAll(reader)).doesNotContain("seule.pdf");
+        }
+
+        @Test
+        void motifSurTousLesNiveaux_excluAussiLeTempProfond() throws Exception {
+            assertThat(readAll(reader("**/temp", 0))).containsExactly("these.pdf", "these_copie.pdf");
+        }
+
+        @Test
+        void plusieursMotifs() throws Exception {
+            assertThat(readAll(reader(" */*/temp , ETAB/THESE_3 ", 0))).containsExactly("these.pdf", "these_copie.pdf");
+        }
+
+        @Test
+        void offsetSAppliqueALaListeApresExclusion() throws Exception {
+            // La liste triée change : l'offset 2 d'un run sans exclusion ne désigne plus le même fichier
+            assertThat(readAll(reader("", 2))).first().isEqualTo("these_v4.pdf");
+            assertThat(readAll(reader("*/*/temp", 2))).containsExactly("profond.pdf");
+        }
+
+        @Test
+        void motifsVides_memeListeQueSansCle() throws Exception {
+            assertThat(readAll(reader(" , ", 0))).containsExactlyElementsOf(readAll(reader("", 0)));
+        }
     }
 }

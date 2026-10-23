@@ -8,7 +8,6 @@ import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.cos.COSStream;
 import org.apache.pdfbox.io.RandomAccessRead;
 import org.apache.pdfbox.io.RandomAccessReadBuffer;
-import org.apache.pdfbox.io.RandomAccessReadBufferedFile;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.util.unit.DataSize;
@@ -118,7 +117,7 @@ class PDFTextExtractorTest {
     }
 
     @Test
-    void sousLeSeuil_lueEnMemoire_auDela_lueParPages() throws IOException {
+    void sousLeSeuil_lueEnMemoire_auDela_lueParBlocs() throws IOException {
         Path pdf = TestPdfs.create(tempDir.resolve("a.pdf"), "Page un");
         long size = Files.size(pdf);
         SystemFontUnicodeRecovery recovery = new SystemFontUnicodeRecovery(new SystemFontIndex());
@@ -128,10 +127,10 @@ class PDFTextExtractorTest {
             assertThat(input.length()).isEqualTo(size);
         }
         try (RandomAccessRead input = new PDFTextExtractor(recovery, DataSize.ofBytes(size - 1)).open(pdf.toString())) {
-            assertThat(input).isInstanceOf(RandomAccessReadBufferedFile.class);
+            assertThat(input).isInstanceOf(BlockCachedRandomAccessRead.class);
         }
         try (RandomAccessRead input = new PDFTextExtractor(recovery, DataSize.ofBytes(0)).open(pdf.toString())) {
-            assertThat(input).isInstanceOf(RandomAccessReadBufferedFile.class);
+            assertThat(input).isInstanceOf(BlockCachedRandomAccessRead.class);
         }
     }
 
@@ -145,10 +144,25 @@ class PDFTextExtractorTest {
         SystemFontUnicodeRecovery recovery = new SystemFontUnicodeRecovery(new SystemFontIndex());
 
         PDFExtraction inMemory = new PDFTextExtractor(recovery, DataSize.ofGigabytes(1)).extractTextFromPdf(pdf.toString(), 0);
-        PDFExtraction byPages = new PDFTextExtractor(recovery, DataSize.ofBytes(0)).extractTextFromPdf(pdf.toString(), 0);
+        PDFExtraction byBlocks = new PDFTextExtractor(recovery, DataSize.ofBytes(0)).extractTextFromPdf(pdf.toString(), 0);
+        // Taille impaire : les objets et les lectures de PDFBox chevauchent sans cesse deux blocs
+        PDFExtraction bySmallBlocks = new PDFTextExtractor(recovery, DataSize.ofBytes(0), DataSize.ofBytes(1021))
+                .extractTextFromPdf(pdf.toString(), 0);
 
-        assertThat(inMemory).isEqualTo(byPages);
+        assertThat(inMemory).isEqualTo(byBlocks).isEqualTo(bySmallBlocks);
         assertThat(inMemory.pages()).hasSize(400);
+    }
+
+    @Test
+    void tailleDeBlocHorsLimites_refuseeAuDemarrage() {
+        SystemFontUnicodeRecovery recovery = new SystemFontUnicodeRecovery(new SystemFontIndex());
+
+        assertThatThrownBy(() -> new PDFTextExtractor(recovery, DataSize.ofMegabytes(64), DataSize.ofBytes(0)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("app.anr.read-block-size");
+        assertThatThrownBy(() -> new PDFTextExtractor(recovery, DataSize.ofMegabytes(64), DataSize.ofBytes((1 << 20) + 1)))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(new PDFTextExtractor(recovery, DataSize.ofMegabytes(64), DataSize.ofMegabytes(1))).isNotNull();
     }
 
     @Test

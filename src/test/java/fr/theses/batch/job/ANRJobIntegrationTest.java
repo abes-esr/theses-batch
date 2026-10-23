@@ -63,6 +63,9 @@ class ANRJobIntegrationTest {
         // plusieurs threads de traitement : les lignes doivent malgré tout suivre l'ordre des chemins
         registry.add("app.anr.process-threads", () -> "4");
         registry.add("app.anr.fonts-dir", fontsDir::toString);
+        // 0 : tous les PDF passent par la lecture par blocs, avec des blocs plus petits que les fichiers
+        registry.add("app.anr.in-memory-max-size", () -> "0");
+        registry.add("app.anr.read-block-size", () -> "4KB");
         registry.add("app.anr.writers.enabled", () -> "csv,json");
         registry.add("app.anr.writers.header", () -> "file_name,page_number,match_value,error_message,nnt");
         registry.add("app.anr.json.pretty-print", () -> "false");

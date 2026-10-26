@@ -2,6 +2,7 @@ package fr.theses.batch.util.parser;
 
 import fr.theses.batch.support.LogCapture;
 import fr.theses.batch.support.TestPdfs;
+import fr.theses.batch.util.log.PdfWarningCollector;
 import org.apache.logging.log4j.Level;
 import org.apache.pdfbox.cos.COSDictionary;
 import org.apache.pdfbox.cos.COSName;
@@ -16,6 +17,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -114,6 +116,18 @@ class PDFTextExtractorTest {
             assertThat(extraction.pages().getFirst().text()).contains("ANR-15-CE23-0001");
             assertThat(logs.messages(Level.WARN)).singleElement().asString().contains("CIDToGIDMap");
         }
+
+        // Pendant le traitement d'un PDF, comptée dans le récapitulatif du fichier plutôt que journalisée
+        Map<String, Integer> warnings;
+        try (LogCapture logs = LogCapture.of(SystemFontUnicodeRecovery.class)) {
+            PdfWarningCollector.start();
+            extractor.extractTextFromPdf(pdf.toString(), 0);
+            warnings = PdfWarningCollector.stop();
+
+            assertThat(logs.messages(Level.WARN)).isEmpty();
+        }
+        assertThat(warnings.keySet()).anySatisfy(type -> assertThat(type)
+                .startsWith("WARN SystemFontUnicodeRecovery - Table /CIDToGIDMap démesurée tronquée, police "));
     }
 
     @Test

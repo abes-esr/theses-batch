@@ -1,7 +1,10 @@
 package fr.theses.batch.job.listener;
 
 import fr.theses.batch.business.anr.model.dto.ANRMatchDTO;
+import fr.theses.batch.business.anr.model.dto.ANRPageMatchDTO;
 import fr.theses.batch.job.reader.ANRReader;
+import fr.theses.batch.util.parser.PDFExtraction;
+import fr.theses.batch.util.parser.PDFTextExtractor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.batch.core.ExitStatus;
@@ -11,6 +14,8 @@ import org.springframework.batch.infrastructure.item.Chunk;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -22,6 +27,7 @@ class ANRProgressListenerTest {
     private static final long SECOND = 1_000_000_000L;
 
     private final AtomicLong clock = new AtomicLong();
+    private final ANRRunStatistics statistics = new ANRRunStatistics();
     private ANRReader reader;
 
     @BeforeEach
@@ -31,7 +37,7 @@ class ANRProgressListenerTest {
     }
 
     private ANRProgressListener listener(Duration interval) {
-        ANRProgressListener listener = new ANRProgressListener(reader, interval, clock::get);
+        ANRProgressListener listener = new ANRProgressListener(reader, statistics, interval, clock::get);
         listener.beforeStep(mock(StepExecution.class));
         return listener;
     }
@@ -109,6 +115,84 @@ class ANRProgressListenerTest {
 
         assertThat(listener.progressMessage(clock.get()))
                 .contains("2/10").contains("1 avec correspondance, 1 en erreur, 0 sans correspondance");
+    }
+
+    private static ANRMatchDTO itemWithMatches(LocalDate defenseDate, String... values) {
+        List<ANRPageMatchDTO> matches = Arrays.stream(values)
+                .map(value -> new ANRPageMatchDTO(1, value, "", ""))
+                .toList();
+        return item(null).withPageMatches(matches).withDefenseDate(defenseDate);
+    }
+
+    private static PDFExtraction extraction(int pages, int glyphs, int lost, int recovered, long size) {
+        List<PDFTextExtractor.PDFPage> list = new ArrayList<>();
+        for (int i = 1; i <= pages; i++) {
+            list.add(new PDFTextExtractor.PDFPage(i, ""));
+        }
+        return new PDFExtraction(list, pages, glyphs, lost, recovered, size);
+    }
+
+    @Test
+    void bilan_reprendLaProgressionEtLesStatistiquesDuRun() {
+        ANRProgressListener listener = listener(Duration.ofHours(1));
+        for (int i = 0; i < 4; i++) {
+            listener.afterRead(item(null));
+        }
+        statistics.record("A/a.pdf", extraction(10, 1000, 10, 0, 3 * 1_048_576L), SECOND, false);
+        statistics.record("B/b.pdf", extraction(20, 1000, 0, 30, 5 * 1_048_576L), 3 * SECOND, true);
+        statistics.record("C/c.pdf", null, 2 * SECOND, false);
+        listener.afterWrite(new Chunk<>(
+                itemWithMatches(LocalDate.of(2020, 5, 1), "ANR-20-ABCD", "ANR-20-ABCD"),
+                itemWithMatches(LocalDate.of(2019, 1, 1), "ANR-19-WXYZ"),
+                item("Erreur PDF")));
+
+        assertThat(listener.summaryMessage("COMPLETED", 2 * SECOND)).isEqualTo(String.join(System.lineSeparator(),
+                "Fin du traitement (COMPLETED) : 4/10 fichiers en 2 s — 2,0 fichiers/s en moyenne",
+                "    Résultats : 2 avec correspondance, 1 en erreur, 1 sans correspondance",
+                "    Correspondances : 3 (2 valeurs distinctes) — fichiers écrits par année de soutenance :"
+                        + " 2019 : 1, 2020 : 1, inconnue : 1",
+                "    Lecture : 30 pages, 8,0 Mo de PDF (4,0 Mo par fichier, 4,0 Mo/s)",
+                "    Texte : 0,5 % des glyphes perdus (1 fichier(s)), 1,5 % reconstitués via les polices système (1 fichier(s))",
+                "    Avertissements PDFBox non bénins : 1 fichier(s)",
+                "    Fichier le plus lent : B/b.pdf (3,0 s)"));
+    }
+
+    @Test
+    void bilan_sansFichier_neDonneQueLesCompteurs() {
+        when(reader.getTotalToRead()).thenReturn(0);
+
+        assertThat(listener(Duration.ZERO).summaryMessage("COMPLETED", 0)).isEqualTo(String.join(System.lineSeparator(),
+                "Fin du traitement (COMPLETED) : 0/0 fichiers en 0 s",
+                "    Résultats : 0 avec correspondance, 0 en erreur, 0 sans correspondance",
+                "    Correspondances : 0 (0 valeurs distinctes)",
+                "    Avertissements PDFBox non bénins : 0 fichier(s)"));
+    }
+
+    @Test
+    void bilan_sansAnneeInconnue_pasDeVirguleFinale() {
+        ANRProgressListener listener = listener(Duration.ZERO);
+        listener.afterRead(item(null));
+        listener.afterWrite(new Chunk<>(itemWithMatches(LocalDate.of(2021, 1, 1), "ANR-21-AAAA")));
+
+        assertThat(listener.summaryMessage("COMPLETED", SECOND))
+                .contains("par année de soutenance : 2021 : 1" + System.lineSeparator());
+    }
+
+    @Test
+    void beforeStep_remetLesStatistiquesAZero() {
+        statistics.record("a.pdf", extraction(1, 1, 0, 0, 1), SECOND, true);
+
+        listener(Duration.ZERO);
+
+        assertThat(statistics.extractedFiles()).isZero();
+        assertThat(statistics.filesWithHarmfulWarnings()).isZero();
+        assertThat(statistics.slowestFile()).isNull();
+    }
+
+    @Test
+    void formatSize_passeEnGoAPartirDe1Go() {
+        assertThat(ANRProgressListener.formatSize(512 * 1_048_576L)).isEqualTo("512,0 Mo");
+        assertThat(ANRProgressListener.formatSize(1536 * 1_048_576L)).isEqualTo("1,5 Go");
     }
 
     @Test

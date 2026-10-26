@@ -1,6 +1,7 @@
 package fr.theses.batch.job.listener;
 
 import fr.theses.batch.business.anr.model.dto.ANRMatchDTO;
+import fr.theses.batch.business.anr.model.dto.ANRPageMatchDTO;
 import fr.theses.batch.job.reader.ANRReader;
 import fr.theses.batch.util.date.DateUtils;
 import lombok.extern.slf4j.Slf4j;
@@ -14,11 +15,18 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import java.lang.management.GarbageCollectorMXBean;
+import java.lang.management.ManagementFactory;
+import java.lang.management.MemoryType;
 import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
 import java.util.function.LongSupplier;
 
 /**
@@ -26,7 +34,7 @@ import java.util.function.LongSupplier;
  * débit sur les dernières minutes et temps restant estimé à ce débit.
  * <p>
  * Une ligne au plus par intervalle app.anr.progress-interval (0 = à chaque chunk), émise après
- * l'écriture d'un chunk, et un bilan en fin de step.
+ * l'écriture d'un chunk, et un bilan détaillé en fin de step (voir summaryMessage).
  * <p>
  * Pas de ChunkListener : Spring Batch 6 ne l'appelle pas quand les items d'un chunk sont traités en
  * parallèle (process-threads &gt; 1). L'écriture, elle, est notifiée dans les deux modes, et
@@ -44,6 +52,7 @@ public class ANRProgressListener
      */
     static final Duration RATE_WINDOW = Duration.ofMinutes(5);
     private static final long RATE_WINDOW_NANOS = RATE_WINDOW.toNanos();
+    private static final long MIB = 1_048_576L;
 
     private final ANRReader reader;
     private final long intervalNanos;
@@ -54,20 +63,33 @@ public class ANRProgressListener
      */
     private final Deque<long[]> samples = new ArrayDeque<>();
 
+    private final ANRRunStatistics statistics;
+    /**
+     * Valeurs ANR distinctes trouvées, pour le bilan
+     */
+    private final Set<String> distinctMatchValues = new HashSet<>();
+    /**
+     * Fichiers écrits (correspondance ou erreur) par année de soutenance, pour le bilan
+     */
+    private final Map<Integer, Long> filesByYear = new TreeMap<>();
+
     private long startNanos;
     private long lastLogNanos;
     private long read;
     private long written;
     private long errors;
+    private long matches;
+    private long filesWithoutYear;
 
     @Autowired
-    public ANRProgressListener(ANRReader reader,
+    public ANRProgressListener(ANRReader reader, ANRRunStatistics statistics,
                                @Value("${app.anr.progress-interval:30s}") Duration interval) {
-        this(reader, interval, System::nanoTime);
+        this(reader, statistics, interval, System::nanoTime);
     }
 
-    ANRProgressListener(ANRReader reader, Duration interval, LongSupplier nanoClock) {
+    ANRProgressListener(ANRReader reader, ANRRunStatistics statistics, Duration interval, LongSupplier nanoClock) {
         this.reader = reader;
+        this.statistics = statistics;
         this.intervalNanos = interval.toNanos();
         this.nanoClock = nanoClock;
     }
@@ -79,6 +101,11 @@ public class ANRProgressListener
         read = 0;
         written = 0;
         errors = 0;
+        matches = 0;
+        distinctMatchValues.clear();
+        filesByYear.clear();
+        filesWithoutYear = 0;
+        statistics.reset();
         samples.clear();
         samples.add(new long[]{startNanos, 0});
         log.info("Début du traitement : {} fichiers à traiter", reader.getTotalToRead());
@@ -99,6 +126,15 @@ public class ANRProgressListener
         for (ANRMatchDTO item : chunk) {
             if (item.errorMessage() != null) {
                 errors++;
+            }
+            matches += item.pageMatches().size();
+            for (ANRPageMatchDTO match : item.pageMatches()) {
+                distinctMatchValues.add(match.matchValue());
+            }
+            if (item.defenseDate() != null) {
+                filesByYear.merge(item.defenseDate().getYear(), 1L, Long::sum);
+            } else {
+                filesWithoutYear++;
             }
         }
         long now = nanoClock.getAsLong();
@@ -122,10 +158,107 @@ public class ANRProgressListener
 
     @Override
     public ExitStatus afterStep(StepExecution stepExecution) {
-        long elapsed = nanoClock.getAsLong() - startNanos;
-        log.info("Fin du traitement ({}) : {} fichiers en {} — {}",
-                stepExecution.getExitStatus().getExitCode(), read, DateUtils.formatDuration(elapsed), counts());
+        log.info("{}{}", summaryMessage(stepExecution.getExitStatus().getExitCode(), nanoClock.getAsLong()),
+                jvmLine());
         return stepExecution.getExitStatus();
+    }
+
+    /**
+     * Bilan de fin de step, ex. :
+     * <pre>
+     * Fin du traitement (COMPLETED) : 229812/229812 fichiers en 7 h 31 min — 8,5 fichiers/s en moyenne
+     *     Résultats : 1234 avec correspondance, 12 en erreur, 228566 sans correspondance
+     *     Correspondances : 5678 (3456 valeurs distinctes) — fichiers écrits par année de soutenance : 2019 : 600, inconnue : 646
+     *     Lecture : 1234567 pages, 4321,0 Go de PDF (19,2 Mo par fichier, 163,5 Mo/s)
+     *     Texte : 0,8 % des glyphes perdus (345 fichier(s)), 1,2 % reconstitués via les polices système (678 fichier(s))
+     *     Avertissements PDFBox non bénins : 456 fichier(s)
+     *     Fichier le plus lent : ETAB/THESE_1/document/these.pdf (123,4 s)
+     * </pre>
+     * Hors la première ligne et les résultats, les compteurs proviennent d'ANRRunStatistics,
+     * alimenté par le processor pour chaque fichier, avec ou sans correspondance.
+     */
+    String summaryMessage(String exitCode, long now) {
+        long elapsed = now - startNanos;
+        double seconds = elapsed / 1e9;
+        StringBuilder message = new StringBuilder(String.format(Locale.FRANCE,
+                "Fin du traitement (%s) : %d/%d fichiers en %s", exitCode, read, reader.getTotalToRead(),
+                DateUtils.formatDuration(elapsed)));
+        if (elapsed > 0 && read > 0) {
+            message.append(String.format(Locale.FRANCE, " — %.1f fichiers/s en moyenne", read / seconds));
+        }
+        line(message, "Résultats : " + counts());
+
+        StringBuilder results = new StringBuilder(String.format("Correspondances : %d (%d valeurs distinctes)",
+                matches, distinctMatchValues.size()));
+        if (!filesByYear.isEmpty() || filesWithoutYear > 0) {
+            results.append(" — fichiers écrits par année de soutenance : ");
+            filesByYear.forEach((year, count) -> results.append(year).append(" : ").append(count).append(", "));
+            if (filesWithoutYear > 0) {
+                results.append("inconnue : ").append(filesWithoutYear);
+            } else {
+                results.setLength(results.length() - 2);
+            }
+        }
+        line(message, results);
+
+        long files = statistics.extractedFiles();
+        if (files > 0) {
+            StringBuilder reading = new StringBuilder(String.format(Locale.FRANCE, "Lecture : %d pages, %s de PDF (%s par fichier",
+                    statistics.pages(), formatSize(statistics.bytes()), formatSize(statistics.bytes() / files)));
+            if (elapsed > 0) {
+                reading.append(", ").append(formatSize((long) (statistics.bytes() / seconds))).append("/s");
+            }
+            line(message, reading.append(')'));
+            line(message, String.format(Locale.FRANCE,
+                    "Texte : %.1f %% des glyphes perdus (%d fichier(s)), %.1f %% reconstitués via les polices système (%d fichier(s))",
+                    percent(statistics.lostGlyphs(), statistics.glyphs()), statistics.filesWithLostText(),
+                    percent(statistics.recoveredGlyphs(), statistics.glyphs()), statistics.filesWithRecoveredText()));
+        }
+        line(message, "Avertissements PDFBox non bénins : " + statistics.filesWithHarmfulWarnings() + " fichier(s)");
+        if (statistics.slowestFile() != null) {
+            line(message, String.format(Locale.FRANCE, "Fichier le plus lent : %s (%.1f s)",
+                    statistics.slowestFile(), statistics.slowestNanos() / 1e9));
+        }
+        return message.toString();
+    }
+
+    /**
+     * Mémoire et GC depuis le démarrage de la JVM, ex. « JVM : heap max 6144 Mo, pic ≤ 5900 Mo — GC : 1234
+     * collections, 45 s (0,2 % du temps) ». Le pic est la somme des pics de chaque zone du heap, atteints
+     * à des instants différents et déchets compris : un majorant, pas le volume des objets vivants.
+     */
+    private static String jvmLine() {
+        long peak = ManagementFactory.getMemoryPoolMXBeans().stream()
+                .filter(pool -> pool.getType() == MemoryType.HEAP)
+                .mapToLong(pool -> pool.getPeakUsage().getUsed())
+                .sum();
+        long collections = 0;
+        long gcMillis = 0;
+        for (GarbageCollectorMXBean gc : ManagementFactory.getGarbageCollectorMXBeans()) {
+            collections += Math.max(0, gc.getCollectionCount());
+            gcMillis += Math.max(0, gc.getCollectionTime());
+        }
+        long uptime = ManagementFactory.getRuntimeMXBean().getUptime();
+        return String.format(Locale.FRANCE, "%n    JVM : heap max %d Mo, pic ≤ %d Mo — GC : %d collections, %s (%.1f %% du temps)",
+                Runtime.getRuntime().maxMemory() / MIB, peak / MIB, collections,
+                DateUtils.formatDuration(gcMillis * 1_000_000L), percent(gcMillis, uptime));
+    }
+
+    private static void line(StringBuilder message, CharSequence line) {
+        message.append(String.format("%n    ")).append(line);
+    }
+
+    /**
+     * Taille en Mo, ou en Go à partir de 1 Go (unités binaires, comme dans les lignes par fichier)
+     */
+    static String formatSize(long bytes) {
+        return bytes >= 1024 * MIB
+                ? String.format(Locale.FRANCE, "%.1f Go", bytes / (1024.0 * MIB))
+                : String.format(Locale.FRANCE, "%.1f Mo", bytes / (double) MIB);
+    }
+
+    private static double percent(long part, long whole) {
+        return whole == 0 ? 0 : 100.0 * part / whole;
     }
 
     /**

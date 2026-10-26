@@ -2,6 +2,7 @@ package fr.theses.batch.job.processor;
 
 import fr.theses.batch.business.anr.model.dto.ANRMatchDTO;
 import fr.theses.batch.business.anr.model.dto.ANRPageMatchDTO;
+import fr.theses.batch.job.listener.ANRRunStatistics;
 import fr.theses.batch.util.log.BenignPdfWarnings;
 import fr.theses.batch.util.log.PdfWarningCollector;
 import fr.theses.batch.util.parser.PDFExtraction;
@@ -41,11 +42,13 @@ public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
     @Value("${app.anr.input-dir:/input}")
     private String inputDir;
     private final PDFTextExtractor pdfTextExtractor;
+    private final ANRRunStatistics statistics;
     private Pattern anrPattern;
     private Path inputPath;
 
-    public ANRProcessor(PDFTextExtractor pdfTextExtractor) {
+    public ANRProcessor(PDFTextExtractor pdfTextExtractor, ANRRunStatistics statistics) {
         this.pdfTextExtractor = pdfTextExtractor;
+        this.statistics = statistics;
     }
 
     @PostConstruct
@@ -178,6 +181,8 @@ public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
      * (--logging.level.fr.theses.batch.job.processor.ANRProcessor=DEBUG pour avoir la durée et la
      * taille de chaque fichier). Des avertissements bénins seuls n'imposent donc aucun niveau, mais
      * figurent dans la ligne dès qu'elle est écrite.
+     * <p>
+     * Le fichier est aussi compté dans les statistiques du run ({@link ANRRunStatistics}).
      *
      * @param relativePath Chemin du fichier relatif à app.anr.input-dir
      * @param extraction   Résultat de l'extraction, null si le fichier n'a pas pu être lu
@@ -193,6 +198,7 @@ public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
                 .collect(Collectors.partitioningBy(e -> BenignPdfWarnings.isBenign(e.getKey())));
         List<Map.Entry<String, Integer>> harmful = byBenign.get(false);
         List<Map.Entry<String, Integer>> benign = byBenign.get(true);
+        statistics.record(relativePath, extraction, elapsedNanos, !harmful.isEmpty());
         if (harmful.isEmpty() && !lost && !recovered && !slow && !log.isDebugEnabled()) {
             return;
         }

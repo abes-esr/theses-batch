@@ -2,6 +2,7 @@ package fr.theses.batch.job.processor;
 
 import fr.theses.batch.business.anr.model.dto.ANRMatchDTO;
 import fr.theses.batch.business.anr.model.dto.ANRPageMatchDTO;
+import fr.theses.batch.job.listener.ANRRunStatistics;
 import fr.theses.batch.support.LogCapture;
 import fr.theses.batch.support.TestPdfs;
 import fr.theses.batch.util.log.PdfWarningCollector;
@@ -34,7 +35,7 @@ class ANRProcessorTest {
     Path inputDir;
 
     private ANRProcessor processor(PDFTextExtractor extractor, int nbPages, int contextCharacters) {
-        ANRProcessor processor = new ANRProcessor(extractor);
+        ANRProcessor processor = new ANRProcessor(extractor, new ANRRunStatistics());
         ReflectionTestUtils.setField(processor, "maxPages", nbPages);
         ReflectionTestUtils.setField(processor, "anrPatternSource", TestPdfs.ANR_PATTERN);
         ReflectionTestUtils.setField(processor, "contextCharacters", contextCharacters);

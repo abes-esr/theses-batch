@@ -2,13 +2,13 @@ package fr.theses.batch.util.parser;
 
 import fr.theses.batch.support.LogCapture;
 import fr.theses.batch.support.TestPdfs;
+import fr.theses.batch.util.log.PdfWarningCollector;
 import org.apache.logging.log4j.Level;
 import org.apache.pdfbox.cos.COSDictionary;
 import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.cos.COSStream;
 import org.apache.pdfbox.io.RandomAccessRead;
 import org.apache.pdfbox.io.RandomAccessReadBuffer;
-import org.apache.pdfbox.io.RandomAccessReadBufferedFile;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.util.unit.DataSize;
@@ -17,6 +17,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -115,10 +116,22 @@ class PDFTextExtractorTest {
             assertThat(extraction.pages().getFirst().text()).contains("ANR-15-CE23-0001");
             assertThat(logs.messages(Level.WARN)).singleElement().asString().contains("CIDToGIDMap");
         }
+
+        // Pendant le traitement d'un PDF, comptée dans le récapitulatif du fichier plutôt que journalisée
+        Map<String, Integer> warnings;
+        try (LogCapture logs = LogCapture.of(SystemFontUnicodeRecovery.class)) {
+            PdfWarningCollector.start();
+            extractor.extractTextFromPdf(pdf.toString(), 0);
+            warnings = PdfWarningCollector.stop();
+
+            assertThat(logs.messages(Level.WARN)).isEmpty();
+        }
+        assertThat(warnings.keySet()).anySatisfy(type -> assertThat(type)
+                .startsWith("WARN SystemFontUnicodeRecovery - Table /CIDToGIDMap démesurée tronquée, police "));
     }
 
     @Test
-    void sousLeSeuil_lueEnMemoire_auDela_lueParPages() throws IOException {
+    void sousLeSeuil_lueEnMemoire_auDela_lueParBlocs() throws IOException {
         Path pdf = TestPdfs.create(tempDir.resolve("a.pdf"), "Page un");
         long size = Files.size(pdf);
         SystemFontUnicodeRecovery recovery = new SystemFontUnicodeRecovery(new SystemFontIndex());
@@ -128,10 +141,10 @@ class PDFTextExtractorTest {
             assertThat(input.length()).isEqualTo(size);
         }
         try (RandomAccessRead input = new PDFTextExtractor(recovery, DataSize.ofBytes(size - 1)).open(pdf.toString())) {
-            assertThat(input).isInstanceOf(RandomAccessReadBufferedFile.class);
+            assertThat(input).isInstanceOf(BlockCachedRandomAccessRead.class);
         }
         try (RandomAccessRead input = new PDFTextExtractor(recovery, DataSize.ofBytes(0)).open(pdf.toString())) {
-            assertThat(input).isInstanceOf(RandomAccessReadBufferedFile.class);
+            assertThat(input).isInstanceOf(BlockCachedRandomAccessRead.class);
         }
     }
 
@@ -145,10 +158,25 @@ class PDFTextExtractorTest {
         SystemFontUnicodeRecovery recovery = new SystemFontUnicodeRecovery(new SystemFontIndex());
 
         PDFExtraction inMemory = new PDFTextExtractor(recovery, DataSize.ofGigabytes(1)).extractTextFromPdf(pdf.toString(), 0);
-        PDFExtraction byPages = new PDFTextExtractor(recovery, DataSize.ofBytes(0)).extractTextFromPdf(pdf.toString(), 0);
+        PDFExtraction byBlocks = new PDFTextExtractor(recovery, DataSize.ofBytes(0)).extractTextFromPdf(pdf.toString(), 0);
+        // Taille impaire : les objets et les lectures de PDFBox chevauchent sans cesse deux blocs
+        PDFExtraction bySmallBlocks = new PDFTextExtractor(recovery, DataSize.ofBytes(0), DataSize.ofBytes(1021))
+                .extractTextFromPdf(pdf.toString(), 0);
 
-        assertThat(inMemory).isEqualTo(byPages);
+        assertThat(inMemory).isEqualTo(byBlocks).isEqualTo(bySmallBlocks);
         assertThat(inMemory.pages()).hasSize(400);
+    }
+
+    @Test
+    void tailleDeBlocHorsLimites_refuseeAuDemarrage() {
+        SystemFontUnicodeRecovery recovery = new SystemFontUnicodeRecovery(new SystemFontIndex());
+
+        assertThatThrownBy(() -> new PDFTextExtractor(recovery, DataSize.ofMegabytes(64), DataSize.ofBytes(0)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("app.anr.read-block-size");
+        assertThatThrownBy(() -> new PDFTextExtractor(recovery, DataSize.ofMegabytes(64), DataSize.ofBytes((1 << 20) + 1)))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(new PDFTextExtractor(recovery, DataSize.ofMegabytes(64), DataSize.ofMegabytes(1))).isNotNull();
     }
 
     @Test

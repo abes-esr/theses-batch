@@ -1,5 +1,6 @@
 package fr.theses.batch.util.parser;
 
+import fr.theses.batch.util.log.PdfWarningCollector;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.fontbox.cmap.CMap;
 import org.apache.fontbox.cmap.CMapParser;
@@ -100,8 +101,13 @@ public class SystemFontUnicodeRecovery {
                 // avant toute instanciation de la police, ici comme dans PDFTextStripper
                 COSDictionary fontDictionary = fonts == null ? null : fonts.getCOSDictionary(name);
                 if (CidToGidMapLimiter.limit(fontDictionary)) {
-                    log.warn("Police {} : table /CIDToGIDMap démesurée, tronquée à {} octets",
-                            fontDictionary.getNameAsString(COSName.BASE_FONT), CidToGidMapLimiter.MAX_DECODED_BYTES);
+                    // comptée dans le récapitulatif du fichier, une ligne à part seulement hors traitement d'un PDF
+                    String baseFont = String.valueOf(fontDictionary.getNameAsString(COSName.BASE_FONT));
+                    if (!PdfWarningCollector.record("WARN SystemFontUnicodeRecovery - Table /CIDToGIDMap démesurée "
+                            + "tronquée, police " + PdfWarningCollector.fontName(baseFont))) {
+                        log.warn("Police {} : table /CIDToGIDMap démesurée, tronquée à {} octets",
+                                baseFont, CidToGidMapLimiter.MAX_DECODED_BYTES);
+                    }
                 }
                 PDFont font = resources.getFont(name);
                 if (font != null && visited.add(font.getCOSObject())) {

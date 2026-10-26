@@ -2,6 +2,7 @@ package fr.theses.batch.job.processor;
 
 import fr.theses.batch.business.anr.model.dto.ANRMatchDTO;
 import fr.theses.batch.business.anr.model.dto.ANRPageMatchDTO;
+import fr.theses.batch.job.listener.ANRRunStatistics;
 import fr.theses.batch.support.LogCapture;
 import fr.theses.batch.support.TestPdfs;
 import fr.theses.batch.util.log.PdfWarningCollector;
@@ -34,7 +35,7 @@ class ANRProcessorTest {
     Path inputDir;
 
     private ANRProcessor processor(PDFTextExtractor extractor, int nbPages, int contextCharacters) {
-        ANRProcessor processor = new ANRProcessor(extractor);
+        ANRProcessor processor = new ANRProcessor(extractor, new ANRRunStatistics());
         ReflectionTestUtils.setField(processor, "maxPages", nbPages);
         ReflectionTestUtils.setField(processor, "anrPatternSource", TestPdfs.ANR_PATTERN);
         ReflectionTestUtils.setField(processor, "contextCharacters", contextCharacters);
@@ -274,7 +275,7 @@ class ANRProcessorTest {
         try (LogCapture logs = LogCapture.of(ANRProcessor.class)) {
             processorReturning(extraction(10_000, 1, 2)).process(item(inputDir.resolve("x.pdf")));
 
-            assertThat(logs.messages(Level.WARN)).containsExactly(
+            assertThat(logs.messages(Level.INFO)).containsExactly(
                     "x.pdf (0,0 s, 3,5 Mo, 1/1 pages) : texte perdu < 0,1 % (1/10000 glyphes), reconstitué < 0,1 % via les polices système");
         }
     }
@@ -301,7 +302,7 @@ class ANRProcessorTest {
             assertThat(logs.messages(Level.WARN).get(1))
                     .startsWith("x.pdf (0,0 s), 3 avertissement(s) PDFBox :")
                     .containsSubsequence(
-                            "2 x WARN PDSimpleFont - No Unicode mapping in font Calibri",
+                            "2 x PDSimpleFont - No Unicode mapping in font Calibri",
                             "1 x ERROR Foo - Bad table N");
         }
         // La collecte a été fermée par le processor : plus rien n'est comptabilisé sur ce thread
@@ -331,22 +332,20 @@ class ANRProcessorTest {
                 .warn("Using fallback font LiberationSans for base font Helvetica");
     }
 
-    private static final String ARIAL_FALLBACK = "        2 x WARN PDTrueTypeFont - Using fallback font LiberationSans for ArialMT";
+    private static final String ARIAL_FALLBACK = "        2 x PDTrueTypeFont - Using fallback font LiberationSans for ArialMT";
     private static final String HELVETICA_FALLBACK =
-            "        1 x WARN PDType1Font - Using fallback font LiberationSans for base font Helvetica";
+            "        1 x PDType1Font - Using fallback font LiberationSans for Helvetica";
 
     @Test
-    void avertissementsBeninsSeuls_pasDeWarnMaisLigneComplete() throws Exception {
+    void avertissementsBeninsSeuls_comptesSansDetailNiWarn() throws Exception {
         try (LogCapture logs = LogCapture.of(ANRProcessor.class)) {
             processorWarning(extraction(100, 0, 0), ANRProcessorTest::fallbackFonts)
                     .process(item(inputDir.resolve("x.pdf")));
 
             assertThat(logs.messages(Level.WARN)).isEmpty();
             assertThat(logs.messages(Level.INFO)).isEmpty();
-            assertThat(logs.messages(Level.DEBUG)).containsExactly(String.join(System.lineSeparator(),
-                    "x.pdf (0,0 s, 3,5 Mo, 1/1 pages) : texte perdu 0,0 % (0/100 glyphes), 3 avertissement(s) PDFBox bénin(s) :",
-                    ARIAL_FALLBACK,
-                    HELVETICA_FALLBACK));
+            assertThat(logs.messages(Level.DEBUG)).containsExactly(
+                    "x.pdf (0,0 s, 3,5 Mo, 1/1 pages) : texte perdu 0,0 % (0/100 glyphes), 3 avertissement(s) PDFBox bénin(s)");
         }
     }
 
@@ -358,7 +357,7 @@ class ANRProcessorTest {
 
             assertThat(logs.messages(Level.WARN)).isEmpty();
             assertThat(logs.messages(Level.INFO)).singleElement().asString()
-                    .contains("reconstitué 100,0 % via les polices système, 3 avertissement(s) PDFBox bénin(s) :");
+                    .isEqualTo("x.pdf (0,0 s, 3,5 Mo, 1/1 pages) : texte perdu 0,0 % (0/100 glyphes), reconstitué 100,0 % via les polices système, 3 avertissement(s) PDFBox bénin(s)");
         }
     }
 
@@ -374,7 +373,7 @@ class ANRProcessorTest {
 
             assertThat(logs.messages(Level.WARN)).containsExactly(String.join(System.lineSeparator(),
                     "x.pdf (0,0 s, 3,5 Mo, 1/1 pages) : texte perdu 0,0 % (0/100 glyphes), 1 avertissement(s) PDFBox (+ 3 bénin(s)) :",
-                    "        1 x WARN PDCIDFontType2 - Using fallback font LiberationSans for CID-keyed TrueType font Calibri",
+                    "        1 x PDCIDFontType2 - Using fallback font LiberationSans for CID-keyed TrueType font Calibri",
                     ARIAL_FALLBACK,
                     HELVETICA_FALLBACK));
         }
@@ -386,10 +385,63 @@ class ANRProcessorTest {
             processorWarning(extraction(200, 50, 0), ANRProcessorTest::fallbackFonts)
                     .process(item(inputDir.resolve("x.pdf")));
 
+            assertThat(logs.messages(Level.WARN)).containsExactly(
+                    "x.pdf (0,0 s, 3,5 Mo, 1/1 pages) : texte perdu 25,0 % (50/200 glyphes), 3 avertissement(s) PDFBox bénin(s)");
+        }
+    }
+
+    /**
+     * Glyphes sans Unicode dans trois polices de symboles, dont une déclinée en -Identity-H
+     */
+    private static void symbolFontsWithoutUnicode() {
+        var simple = LogManager.getLogger("org.apache.pdfbox.pdmodel.font.PDSimpleFont");
+        simple.warn("No Unicode mapping for g1 (1) in font ABCDEF+CMSY10");
+        simple.warn("No Unicode mapping for g2 (2) in font ABCDEF+CMSY10");
+        simple.warn("No Unicode mapping for g3 (3) in font GHIJKL+MSAM10");
+        var type0 = LogManager.getLogger("org.apache.pdfbox.pdmodel.font.PDType0Font");
+        type0.warn("No Unicode mapping for CID+4 (4) in font MNOPQR+Cambria#20Math");
+        type0.warn("No Unicode mapping for CID+5 (5) in font MNOPQR+Cambria#20Math-Identity-H");
+    }
+
+    @Test
+    void textePerduSousLeSeuil_signaleEnInfoAvecUneLigneParClasseDePolice() throws Exception {
+        try (LogCapture logs = LogCapture.of(ANRProcessor.class)) {
+            processorWarning(extraction(1000, 9, 0), ANRProcessorTest::symbolFontsWithoutUnicode)
+                    .process(item(inputDir.resolve("x.pdf")));
+
+            assertThat(logs.messages(Level.WARN)).isEmpty();
+            assertThat(logs.messages(Level.INFO)).containsExactly(String.join(System.lineSeparator(),
+                    "x.pdf (0,0 s, 3,5 Mo, 1/1 pages) : texte perdu 0,9 % (9/1000 glyphes), 5 avertissement(s) PDFBox :",
+                    "        3 x PDSimpleFont - No Unicode mapping in font CMSY10 (2), MSAM10 (1)",
+                    "        2 x PDType0Font - No Unicode mapping in font Cambria Math"));
+        }
+    }
+
+    @Test
+    void textePerduAuSeuil_signaleEnWarn() throws Exception {
+        try (LogCapture logs = LogCapture.of(ANRProcessor.class)) {
+            processorWarning(extraction(1000, 10, 0), ANRProcessorTest::symbolFontsWithoutUnicode)
+                    .process(item(inputDir.resolve("x.pdf")));
+
+            assertThat(logs.messages(Level.WARN)).singleElement().asString()
+                    .startsWith("x.pdf (0,0 s, 3,5 Mo, 1/1 pages) : texte perdu 1,0 % (10/1000 glyphes), 5 avertissement(s) PDFBox :");
+        }
+    }
+
+    @Test
+    void avertissementNonBeninSansTextePerdu_signaleEnWarn() throws Exception {
+        try (LogCapture logs = LogCapture.of(ANRProcessor.class)) {
+            processorWarning(extraction(1000, 0, 0), () -> {
+                // ToUnicode remplacée par Identity : texte possiblement faux sans aucun glyphe perdu
+                var font = LogManager.getLogger("org.apache.pdfbox.pdmodel.font.PDFont");
+                font.warn("Invalid ToUnicode CMap in font ABCDEF+Calibri");
+                font.warn("Using predefined identity CMap instead");
+            }).process(item(inputDir.resolve("x.pdf")));
+
             assertThat(logs.messages(Level.WARN)).containsExactly(String.join(System.lineSeparator(),
-                    "x.pdf (0,0 s, 3,5 Mo, 1/1 pages) : texte perdu 25,0 % (50/200 glyphes), 3 avertissement(s) PDFBox bénin(s) :",
-                    ARIAL_FALLBACK,
-                    HELVETICA_FALLBACK));
+                    "x.pdf (0,0 s, 3,5 Mo, 1/1 pages) : texte perdu 0,0 % (0/1000 glyphes), 2 avertissement(s) PDFBox :",
+                    "        1 x PDFont - Invalid ToUnicode CMap in font ABCDEF+Calibri",
+                    "        1 x PDFont - Using predefined identity CMap instead"));
         }
     }
 }

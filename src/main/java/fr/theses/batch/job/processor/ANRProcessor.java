@@ -2,8 +2,10 @@ package fr.theses.batch.job.processor;
 
 import fr.theses.batch.business.anr.model.dto.ANRMatchDTO;
 import fr.theses.batch.business.anr.model.dto.ANRPageMatchDTO;
+import fr.theses.batch.job.listener.ANRRunStatistics;
 import fr.theses.batch.util.log.BenignPdfWarnings;
 import fr.theses.batch.util.log.PdfWarningCollector;
+import fr.theses.batch.util.log.PdfWarningSummary;
 import fr.theses.batch.util.parser.PDFExtraction;
 import fr.theses.batch.util.parser.PDFTextExtractor;
 import jakarta.annotation.PostConstruct;
@@ -41,11 +43,13 @@ public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
     @Value("${app.anr.input-dir:/input}")
     private String inputDir;
     private final PDFTextExtractor pdfTextExtractor;
+    private final ANRRunStatistics statistics;
     private Pattern anrPattern;
     private Path inputPath;
 
-    public ANRProcessor(PDFTextExtractor pdfTextExtractor) {
+    public ANRProcessor(PDFTextExtractor pdfTextExtractor, ANRRunStatistics statistics) {
         this.pdfTextExtractor = pdfTextExtractor;
+        this.statistics = statistics;
     }
 
     @PostConstruct
@@ -59,6 +63,13 @@ public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
      * INFO : un fichier lent retient tout son chunk, les autres threads l'attendant pour finir.
      */
     static final Duration SLOW_FILE = Duration.ofSeconds(10);
+
+    /**
+     * Part de texte perdu (en %) à partir de laquelle un fichier est journalisé en WARN ; en dessous, en
+     * INFO. Une perte inférieure vient presque toujours de polices de symboles (CMSY, MSAM, Wingdings…),
+     * qui ne portent pas de numéro ANR.
+     */
+    static final double LOST_TEXT_WARN_PERCENT = 1.0;
 
     /**
      * Horloge en nanosecondes, remplaçable en test
@@ -168,16 +179,19 @@ public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
      * Journalise en un seul message le coût et la qualité de l'extraction de ce fichier : durée de
      * traitement, taille, pages lues sur le total, part du texte perdu (glyphes sans caractère
      * Unicode), part reconstituée via les polices système, et avertissements PDFBox / FontBox
-     * regroupés par type : d'abord ceux qui peuvent affecter le texte, puis les bénins
-     * ({@link BenignPdfWarnings}, ex. remplacement d'une police simple non embarquée), chaque groupe
-     * trié par nombre décroissant ; l'en-tête les distingue, ex. « 3 avertissement(s) PDFBox
-     * (+ 12 bénin(s)) : ».
+     * regroupés par type ({@link PdfWarningSummary}) : d'abord ceux qui peuvent affecter le texte, puis
+     * les bénins ({@link BenignPdfWarnings}, ex. remplacement d'une police simple non embarquée), chaque
+     * groupe trié par nombre décroissant ; l'en-tête les distingue, ex. « 3 avertissement(s) PDFBox
+     * (+ 12 bénin(s)) : ». Des avertissements bénins seuls ne sont que comptés, sans détail.
      * <p>
-     * Niveau : WARN s'il y a du texte perdu ou au moins un avertissement non bénin. Sinon INFO si du
-     * texte a été reconstitué ou si le fichier est plus lent que SLOW_FILE, DEBUG dans les autres cas
-     * (--logging.level.fr.theses.batch.job.processor.ANRProcessor=DEBUG pour avoir la durée et la
-     * taille de chaque fichier). Des avertissements bénins seuls n'imposent donc aucun niveau, mais
-     * figurent dans la ligne dès qu'elle est écrite.
+     * Niveau : WARN si au moins LOST_TEXT_WARN_PERCENT du texte est perdu, ou s'il y a un avertissement
+     * ni bénin ni déjà mesuré par le texte perdu ({@link BenignPdfWarnings#isMeasuredByLostText}). Sinon
+     * INFO si du texte a été perdu ou reconstitué, s'il reste un avertissement non bénin, ou si le
+     * fichier est plus lent que SLOW_FILE, DEBUG
+     * dans les autres cas (--logging.level.fr.theses.batch.job.processor.ANRProcessor=DEBUG pour avoir
+     * la durée et la taille de chaque fichier).
+     * <p>
+     * Le fichier est aussi compté dans les statistiques du run ({@link ANRRunStatistics}).
      *
      * @param relativePath Chemin du fichier relatif à app.anr.input-dir
      * @param extraction   Résultat de l'extraction, null si le fichier n'a pas pu être lu
@@ -193,6 +207,9 @@ public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
                 .collect(Collectors.partitioningBy(e -> BenignPdfWarnings.isBenign(e.getKey())));
         List<Map.Entry<String, Integer>> harmful = byBenign.get(false);
         List<Map.Entry<String, Integer>> benign = byBenign.get(true);
+        boolean unmeasured = harmful.stream().anyMatch(e -> !BenignPdfWarnings.isMeasuredByLostText(e.getKey()));
+        boolean muchLost = extraction != null && extraction.lostPercent() >= LOST_TEXT_WARN_PERCENT;
+        statistics.record(relativePath, extraction, elapsedNanos, !harmful.isEmpty());
         if (harmful.isEmpty() && !lost && !recovered && !slow && !log.isDebugEnabled()) {
             return;
         }
@@ -217,20 +234,21 @@ public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
             int benignTotal = total(benign);
             message.append(", ");
             if (harmfulTotal == 0) {
-                message.append(benignTotal).append(" avertissement(s) PDFBox bénin(s) :");
-            } else if (benignTotal == 0) {
-                message.append(harmfulTotal).append(" avertissement(s) PDFBox :");
+                message.append(benignTotal).append(" avertissement(s) PDFBox bénin(s)");
             } else {
-                message.append(harmfulTotal).append(" avertissement(s) PDFBox (+ ")
-                        .append(benignTotal).append(" bénin(s)) :");
+                message.append(harmfulTotal).append(" avertissement(s) PDFBox");
+                if (benignTotal > 0) {
+                    message.append(" (+ ").append(benignTotal).append(" bénin(s))");
+                }
+                message.append(" :");
+                Stream.concat(PdfWarningSummary.lines(harmful).stream(), PdfWarningSummary.lines(benign).stream())
+                        .forEach(line -> message.append(String.format("%n    %s", line)));
             }
-            Stream.concat(harmful.stream(), benign.stream())
-                    .forEach(e -> message.append(String.format("%n    %5d x %s", e.getValue(), e.getKey())));
         }
 
-        if (lost || !harmful.isEmpty()) {
+        if (muchLost || unmeasured) {
             log.warn("{}", message);
-        } else if (recovered || slow) {
+        } else if (lost || !harmful.isEmpty() || recovered || slow) {
             log.info("{}", message);
         } else {
             log.debug("{}", message);

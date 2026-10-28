@@ -6,7 +6,7 @@ name: "build-test-pubshtodockerhub"
 # exemple, si vous indiquez : abesesr/abes-hello
 #   alors l'image sera poussée sur https://hub.docker.com/r/abesesr/abes-hello
 env:
-  DOCKERHUB_IMAGE_PREFIX: abesesr/theses
+  DOCKERHUB_IMAGE_PREFIX: abesesr/theses-batch
 
 on:
   push:
@@ -88,8 +88,6 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.DOCKERHUB_IMAGE_PREFIX }}
-          flavor: |
-            suffix=-batch,onlatest=true
           # Labels OCI : version, revision, created, source, url et licenses sont
           # remplis automatiquement à partir du dépôt et du commit ; ceux-ci complètent
           # ou remplacent les valeurs par défaut.

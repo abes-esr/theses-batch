@@ -42,7 +42,7 @@ jobs:
           # Le PAT est indispensable : un tag poussé avec le GITHUB_TOKEN par défaut ne
           # déclenche aucun workflow (garde-fou anti-récursion de GitHub). Sans lui, la
           # release réussirait mais build-test-pubshtodockerhub.yml ne partirait pas et
-          # l'image abesesr/theses:X.Y.Z-batch ne serait jamais publiée.
+          # l'image abesesr/theses-batch:X.Y.Z ne serait jamais publiée.
           token: ${{ secrets.TOKEN_GITHUB_FOR_GITHUB_ACTION }}
 
       - name: 'Calculate the new version'

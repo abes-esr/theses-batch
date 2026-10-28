@@ -3,9 +3,9 @@ spring:
     name: theses-batch
   batch:
     job:
-      enabled: true
+      enabled: false # Contrôlé par ThesesBatchRunner (anr ou datagouv)
     jdbc:
-      initialize-schema: always  # Crée automatiquement les tables BATCH_* au démarrage
+      initialize-schema: always # Crée automatiquement les tables BATCH_* au démarrage
     # Désactive l'implémentation legacy de ChunkOrientedTasklet (dépréciée dans Spring Batch 6.0)
     # pour utiliser la nouvelle implémentation moderne compatible avec Spring Batch 7.0
     tasklet:
@@ -26,16 +26,16 @@ spring:
       path: /h2-console
 
 app:
+  output-dir: ${OUTPUT_DIR:/output}
   anr:
-    pattern: ${THESES_BATCH_ANR_PATTERN}
+    pattern: ${THESES_BATCH_ANR_PATTERN:ANR-(?:\d{2}-)?[A-Za-z0-9]{4,8}(?:-\d{1,4})?|Agence nationale de la recherche|Labex|\bPIA\b}
     input-dir: /input
-    output-dir: /output
-    max-files: ${THESES_BATCH_ANR_MAX_FILES}
-    offset: ${THESES_BATCH_ANR_OFFSET}
-    nb-pages: ${THESES_BATCH_ANR_NB_PAGES}
-    context-characters: ${THESES_BATCH_ANR_CONTEXT_CHARACTERS}
-    chunk-size: ${THESES_BATCH_ANR_CHUNK_SIZE}
-    exclude-keywords: ${THESES_BATCH_ANR_EXCLUDE_KEYWORDS}
+    max-files: ${THESES_BATCH_ANR_MAX_FILES:500000}
+    offset: ${THESES_BATCH_ANR_OFFSET:0}
+    nb-pages: ${THESES_BATCH_ANR_NB_PAGES:50}
+    context-characters: ${THESES_BATCH_ANR_CONTEXT_CHARACTERS:50}
+    chunk-size: ${THESES_BATCH_ANR_CHUNK_SIZE:500}
+    exclude-keywords: ${THESES_BATCH_ANR_EXCLUDE_KEYWORDS:annexe,resume,résumé,abstract,errata,summary,erratum,annexes,appendix,appendices,titre,couverture,couv,cover,synthese,synthèse,glossaire,illustr,diff,image,table,sommaire,garde,planche,annnexe,annex_}
     # Répertoires exclus du parcours : motifs glob séparés par des virgules, comparés au chemin du
     # répertoire relatif à input-dir (séparateur « / », sensible à la casse ; * = un nom ou une partie,
     # ? = un caractère, ** = un nombre quelconque de niveaux). Le parcours ne descend pas dans un
@@ -75,19 +75,36 @@ app:
     fonts-dir: ${THESES_BATCH_ANR_FONTS_DIR:/usr/share/fonts}
     # Configuration des writers
     writers:
-      enabled: ${THESES_BATCH_ANR_WRITERS_ENABLED}
-      header: ${THESES_BATCH_ANR_WRITERS_HEADER}
+      enabled: ${THESES_BATCH_ANR_WRITERS_ENABLED:csv,json}
+      header: ${THESES_BATCH_ANR_WRITERS_HEADER:file_path,file_name,page_number,match_value,preceding_context,following_context,analyzed_pages_number,total_pages,processing_time,nnt,doi,defense_date,error_message}
     json:
-      pretty-print: ${THESES_BATCH_ANR_JSON_PRETTY_PRINT}
+      pretty-print: ${THESES_BATCH_ANR_JSON_PRETTY_PRINT:true}
+  datagouv:
+    api-key: ${DATA_GOUV_API_KEY:}
+    dataset-id: ${DATA_GOUV_DATASET_ID:}
+    csv-resource-id: ${DATA_GOUV_CSV_RESOURCE_ID:}
+    json-resource-id: ${DATA_GOUV_JSON_RESOURCE_ID:}
+    jsonl-resource-id: ${DATA_GOUV_JSONL_RESOURCE_ID:}
+    jsonl-gz-resource-id: ${DATA_GOUV_JSONL_GZ_RESOURCE_ID:}
+    upload-enabled: ${DATA_GOUV_UPLOAD_ENABLED:false}
+    # Les fichiers plus gros sont envoyés en plusieurs morceaux de cette taille (un seul morceau en mémoire à la fois).
+    upload-chunk-size: ${DATA_GOUV_UPLOAD_CHUNK_SIZE:10MB}
+    force-run: ${FORCE_RUN:false}
+    mode-test: ${MODE_TEST:${app.mode-test:false}}
+  theses:
+    api-base-url: ${THESES_API_BASE_URL:}
+    page-size: ${THESES_PAGE_SIZE:1000}
+    connect-timeout: ${THESES_CONNECT_TIMEOUT:30s}
+    read-timeout: ${THESES_READ_TIMEOUT:60s}
   solr:
-    enabled: ${THESES_BATCH_SOLR_ENABLED}
-    base-url: ${THESES_BATCH_SOLR_BASE_URL}
-    id-field: ${THESES_BATCH_SOLR_ID_FIELD}
-    nnt-field: ${THESES_BATCH_SOLR_NNT_FIELD}
-    doi-field: ${THESES_BATCH_SOLR_DOI_FIELD}
-    defense-date-field: ${THESES_BATCH_SOLR_DEFENSE_DATE_FIELD}
-    connect-timeout: ${THESES_BATCH_SOLR_CONNECT_TIMEOUT}
-    read-timeout: ${THESES_BATCH_SOLR_READ_TIMEOUT}
+    enabled: ${THESES_BATCH_SOLR_ENABLED:true}
+    base-url: ${THESES_BATCH_SOLR_BASE_URL:http://denim.v102.abes.fr:8080/solr1}
+    id-field: ${THESES_BATCH_SOLR_ID_FIELD:id}
+    nnt-field: ${THESES_BATCH_SOLR_NNT_FIELD:nnt}
+    doi-field: ${THESES_BATCH_SOLR_DOI_FIELD:doi}
+    defense-date-field: ${THESES_BATCH_SOLR_DEFENSE_DATE_FIELD:dateSoutenance_dt}
+    connect-timeout: ${THESES_BATCH_SOLR_CONNECT_TIMEOUT:5000}
+    read-timeout: ${THESES_BATCH_SOLR_READ_TIMEOUT:5000}
 
 # Logging : appenders et niveaux dans log4j2-spring.xml
 # Surcharge ponctuelle : --logging.level.fr.theses.batch=DEBUG

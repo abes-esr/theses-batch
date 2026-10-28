@@ -77,6 +77,7 @@ public class SolrClient {
      * @param rows Nombre maximum de résultats (paramètre rows)
      * @return Map contenant la réponse JSON de Solr
      */
+    @SuppressWarnings("unchecked")
     public Map<String, Object> query(String query, String fields, int rows) {
         if (!enabled) {
             log.debug("Solr est désactivé, retour de réponse vide");
@@ -184,7 +185,6 @@ public class SolrClient {
      * @param fieldName Nom du champ
      * @return Valeur du champ, ou null
      */
-    @SuppressWarnings("unchecked")
     public String extractFieldValue(Map<String, Object> document, String fieldName) {
         if (document == null || fieldName == null || !document.containsKey(fieldName)) {
             return null;

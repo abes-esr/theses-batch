@@ -49,11 +49,13 @@ RUN dnf install -y tzdata \
 # Installation des paquets système :
 # - cronie : remplaçant de crond supportant le signal CTRL+C dans Docker pour un arrêt propre
 # - procps : outils système de gestion des processus (ps, pgrep)
+# - util-linux : flock, verrou empêchant deux batchs simultanés dans un conteneur (theses-batch.sh)
 # - fontconfig & dejavu-sans-fonts : polices pour l'extraction PDF (ANR)
 # - java-21-openjdk-headless : environnement d'exécution Java 21
 RUN dnf install -y \
     cronie \
     procps \
+    util-linux \
     fontconfig \
     dejavu-sans-fonts \
     java-21-openjdk-headless \

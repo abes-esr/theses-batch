@@ -27,6 +27,16 @@ if [ "$1" = "anr" ] || [ "$1" = "datagouv" ] || [ "$1" = "dump" ]; then
     shift
 fi
 
+# Un seul batch à la fois par conteneur : la base H2 (/data/batchdb) n'accepte qu'un processus.
+# Le verrou est posé sur le descripteur 9, hérité par java : il est libéré à la fin de la JVM,
+# même en cas de plantage. Code de sortie 75 si un batch tourne déjà (distinct d'un échec du batch).
+LOCK_FILE="${THESES_BATCH_LOCK_FILE:-/data/theses-batch.lock}"
+exec 9>"${LOCK_FILE}"
+if ! flock -n 9; then
+    echo "Un batch est déjà en cours dans ce conteneur (verrou ${LOCK_FILE}) : lancement annulé." >&2
+    exit 75
+fi
+
 # shellcheck disable=SC2086
 exec java "${HEAP_OPTION}" \
           -XX:+HeapDumpOnOutOfMemoryError \

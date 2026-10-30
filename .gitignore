@@ -27,9 +27,12 @@
 
 # Environment
 .env
+.env.*
+!.env-dist
 .env.local
 .env.*.local
-application.yml
+application*.yml
+!application-dist.yml
 
 # OS
 .DS_Store

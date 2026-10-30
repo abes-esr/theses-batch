@@ -33,7 +33,7 @@ public class ANRBatchConfiguration {
     private final int processThreads;
 
     public ANRBatchConfiguration(
-            @Value("${app.anr.chunk-size:100}") int chunkSize,
+            @Value("${app.anr.chunk-size:500}") int chunkSize,
             @Value("${app.anr.process-threads:8}") int processThreads) {
         this.chunkSize = chunkSize;
         this.processThreads = processThreads;

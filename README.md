@@ -16,9 +16,9 @@ Un ensemble unifié d'utilitaires batch relatifs aux thèses pour l'Abes.
 Le projet utilise l'architecture standard de l'Abes pour les conteneurs Batch :
 
 - **Image de base :** Rocky Linux 9 avec OpenJDK 21, `cronie` et `procps`.
-- **Une image, deux conteneurs**, chacun avec son point d'entrée (choisi par `entrypoint` dans `docker-compose.yml`, voir le dépôt `theses-batch-docker`) :
+- **Une image, deux conteneurs**, chacun avec son point d'entrée. L'image n'en définit aucun par défaut : il doit être précisé par `entrypoint` dans `docker-compose.yml` (voir le dépôt `theses-batch-docker`) :
   - **`/docker-entrypoint-anr.sh`** : aucun cron ; le conteneur reste actif en attendant un lancement manuel (`docker exec`).
-  - **`/docker-entrypoint-datagouv.sh`** (point d'entrée par défaut de l'image) : installe la crontab à partir de `${THESES_BATCH_DATAGOUV_CRON}` puis démarre `crond -n`. Les sorties de cron sont redirigées vers `/proc/1/fd/1` et `/proc/1/fd/2` pour un affichage direct dans les logs Docker.
+  - **`/docker-entrypoint-datagouv.sh`** : installe la crontab à partir de `${THESES_BATCH_DATAGOUV_CRON}` puis démarre `crond -n`. Les sorties de cron sont redirigées vers `/proc/1/fd/1` et `/proc/1/fd/2` pour un affichage direct dans les logs Docker.
 - Les deux points d'entrée répercutent les variables d'environnement dans `/etc/environment` (pour cronie et `docker exec`).
 - Aucun batch n'est lancé au démarrage du conteneur.
 
@@ -102,4 +102,4 @@ Interroge l'API `theses.fr` de façon paginée, génère trois formats d'export 
 - **Règle des 6 mois :** Le batch ne s'exécute que si la dernière publication réussie sur data.gouv.fr date de plus de 6 mois. Les exports en mode test ou sans téléversement (`DATA_GOUV_UPLOAD_ENABLED=false`) ne comptent pas.
 - **Forçage manuel :** `FORCE_RUN=true` permet de contourner la règle des 6 mois.
 - **Mode test :** `MODE_TEST=true` limite l'export à 50 thèses sans délai d'attente.
-- **Téléversement :** Activé avec `DATA_GOUV_UPLOAD_ENABLED=true` et clés d'API configurées.
+- **Téléversement :** Activé avec `DATA_GOUV_UPLOAD_ENABLED=true`, l'URL `DATA_GOUV_BASE_URL` (`https://www.data.gouv.fr` en production, `https://demo.data.gouv.fr` pour tester) et les clés d'API configurées. Toujours ignoré en mode test (`MODE_TEST=true`).

@@ -67,7 +67,11 @@ RUN dnf install -y \
 RUN mkdir -p /data /output /input
 
 # Téléchargement de l'agent OpenTelemetry (standard Abes pour le monitoring)
-ADD https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v2.3.0/opentelemetry-javaagent.jar /scripts/opentelemetry-javaagent.jar
+# Version figée et vérifiée par checksum (SHA-256 publié avec la release GitHub) :
+# à mettre à jour ensemble lors d'une montée de version de l'agent.
+ADD --checksum=sha256:e43a270df53c6f423e0ab157be9c27ccc01d5dc3232e162fe54777573db2f149 \
+    https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v2.33.1/opentelemetry-javaagent.jar \
+    /scripts/opentelemetry-javaagent.jar
 
 # Scripts batch et JAR exécutable
 COPY ./docker/batch/theses-batch.sh /scripts/theses-batch.sh
@@ -76,10 +80,8 @@ COPY ./docker/batch/theses-batch-datagouv.sh /scripts/theses-batch-datagouv.sh
 COPY --from=build-image /build/target/*.jar /scripts/theses-batch.jar
 RUN chmod +x /scripts/*.sh
 
-# Points d'entrée : un par conteneur, choisi par "entrypoint" dans docker-compose (datagouv par défaut)
+# Points d'entrée : un par conteneur. Aucun ENTRYPOINT ni CMD par défaut : chaque service
+# du docker-compose (dépôt theses-batch-docker) doit choisir le sien avec "entrypoint".
 COPY ./docker/batch/docker-entrypoint-anr.sh /docker-entrypoint-anr.sh
 COPY ./docker/batch/docker-entrypoint-datagouv.sh /docker-entrypoint-datagouv.sh
 RUN chmod +x /docker-entrypoint*.sh
-
-ENTRYPOINT ["/docker-entrypoint-datagouv.sh"]
-CMD ["crond", "-n"]

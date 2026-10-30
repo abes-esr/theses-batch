@@ -1,4 +1,4 @@
-package fr.theses.batch.job.datagouv.writer;
+package fr.theses.batch.job.writer.csv;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -9,7 +9,7 @@ import java.util.TreeMap;
  * Comptabilise les valeurs qui ne tiennent pas dans les colonnes fixes du CSV historique
  * (elles restent complètes dans le JSON et le JSONL).
  */
-public class CsvTruncationReport {
+public class DatagouvCsvTruncationReport {
 
     private final Map<String, FieldStats> stats = new TreeMap<>();
 

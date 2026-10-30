@@ -1,4 +1,4 @@
-package fr.theses.batch.job.datagouv.writer;
+package fr.theses.batch.job.writer.csv;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.batch.core.ExitStatus;
@@ -19,23 +19,23 @@ import java.util.List;
  * qui n'ont pas trouvé place dans les colonnes fixes du CSV (elles restent complètes dans le JSON et le JSONL).
  */
 @Slf4j
-public class CsvTruncationReportListener implements StepExecutionListener {
+public class DatagouvCsvTruncationReportListener implements StepExecutionListener {
 
-    private final ThesisCsvLineAggregator csvLineAggregator;
+    private final DatagouvThesisCsvLineAggregator csvLineAggregator;
     private final Path reportFile;
 
     /**
      * @param csvLineAggregator Agrégateur CSV de l'étape, qui tient le décompte des troncatures.
      * @param reportFile        Fichier de rapport à écrire.
      */
-    public CsvTruncationReportListener(ThesisCsvLineAggregator csvLineAggregator, Path reportFile) {
+    public DatagouvCsvTruncationReportListener(DatagouvThesisCsvLineAggregator csvLineAggregator, Path reportFile) {
         this.csvLineAggregator = csvLineAggregator;
         this.reportFile = reportFile;
     }
 
     @Override
     public ExitStatus afterStep(@NonNull StepExecution stepExecution) {
-        CsvTruncationReport report = csvLineAggregator.getTruncationReport();
+        DatagouvCsvTruncationReport report = csvLineAggregator.getTruncationReport();
         List<String> lines = new ArrayList<>();
         lines.add("Valeurs absentes du CSV (colonnes en nombre fixe), complètes dans le JSON et le JSONL.");
         lines.add("Thèses écrites : " + stepExecution.getWriteCount());

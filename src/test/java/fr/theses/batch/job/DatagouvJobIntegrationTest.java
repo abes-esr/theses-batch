@@ -1,4 +1,4 @@
-package fr.theses.batch.job.datagouv;
+package fr.theses.batch.job;
 
 import com.sun.net.httpserver.HttpServer;
 import fr.theses.batch.support.TestPdfs;

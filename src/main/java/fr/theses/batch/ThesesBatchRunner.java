@@ -1,6 +1,6 @@
 package fr.theses.batch;
 
-import fr.theses.batch.job.datagouv.scheduler.DatagouvJobLauncherService;
+import fr.theses.batch.job.scheduler.DatagouvJobLauncherService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.batch.core.BatchStatus;
 import org.springframework.batch.core.job.Job;

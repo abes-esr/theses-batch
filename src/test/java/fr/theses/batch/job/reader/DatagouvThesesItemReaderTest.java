@@ -1,4 +1,4 @@
-package fr.theses.batch.job.datagouv.reader;
+package fr.theses.batch.job.reader;
 
 import fr.theses.batch.business.datagouv.model.Thesis;
 import org.junit.jupiter.api.Test;
@@ -20,9 +20,9 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 /**
- * Tests unitaires de ThesesItemReader.
+ * Tests unitaires de DatagouvThesesItemReader.
  */
-class ThesesItemReaderTest {
+class DatagouvThesesItemReaderTest {
 
     private static final String BASE_URL = "http://theses.test/api/v1";
 
@@ -34,7 +34,7 @@ class ThesesItemReaderTest {
         expectPage(server, 0, 2, "[{\"id\":\"id1\",\"nnt\":\"NNT1\"},{\"id\":\"id2\",\"nnt\":\"NNT2\"}]", 2);
         expectPage(server, 2, 2, "[]", 2);
 
-        ThesesItemReader reader = new ThesesItemReader(builder.build(), 2, false);
+        DatagouvThesesItemReader reader = new DatagouvThesesItemReader(builder.build(), 2, false);
 
         assertThat(reader.read().id()).isEqualTo("id1");
         assertThat(reader.read().id()).isEqualTo("id2");
@@ -51,7 +51,7 @@ class ThesesItemReaderTest {
         // Il ne reste que 20 thèses à lire avant la limite de 50
         expectPage(server, 30, 20, 20, 100);
 
-        ThesesItemReader reader = new ThesesItemReader(builder.build(), 30, true);
+        DatagouvThesesItemReader reader = new DatagouvThesesItemReader(builder.build(), 30, true);
 
         assertThat(readAll(reader)).hasSize(50);
         // Limite atteinte : plus aucun appel à l'API
@@ -65,7 +65,7 @@ class ThesesItemReaderTest {
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         expectPage(server, 0, 10, 3, 3);
 
-        ThesesItemReader reader = new ThesesItemReader(builder.build(), 10, false);
+        DatagouvThesesItemReader reader = new DatagouvThesesItemReader(builder.build(), 10, false);
 
         assertThat(readAll(reader)).extracting(Thesis::id).containsExactly("id0", "id1", "id2");
         assertThat(reader.read()).isNull();
@@ -79,7 +79,7 @@ class ThesesItemReaderTest {
         // L'API annonce 100 thèses mais la page s'arrête à 3 : export tronqué
         expectPage(server, 0, 10, 3, 100);
 
-        ThesesItemReader reader = new ThesesItemReader(builder.build(), 10, false);
+        DatagouvThesesItemReader reader = new DatagouvThesesItemReader(builder.build(), 10, false);
 
         assertThatThrownBy(() -> readAll(reader))
                 .isInstanceOf(IllegalStateException.class)
@@ -94,7 +94,7 @@ class ThesesItemReaderTest {
         expectPage(server, 0, 2, 2, 2);
         expectPage(server, 2, 2, 1, 3);
 
-        ThesesItemReader reader = new ThesesItemReader(builder.build(), 2, false);
+        DatagouvThesesItemReader reader = new DatagouvThesesItemReader(builder.build(), 2, false);
 
         assertThat(readAll(reader)).hasSize(3);
         server.verify();
@@ -109,7 +109,7 @@ class ThesesItemReaderTest {
         expectPage(server, 2, 2, "[{\"id\":\"b\",\"nnt\":\"NNT2\"},{\"id\":\"c\",\"nnt\":\"NNT3\"}]", 3);
         expectPage(server, 4, 2, "[]", 3);
 
-        ThesesItemReader reader = new ThesesItemReader(builder.build(), 2, false);
+        DatagouvThesesItemReader reader = new DatagouvThesesItemReader(builder.build(), 2, false);
 
         assertThat(readAll(reader)).extracting(Thesis::nnt).containsExactly("NNT1", "NNT2", "NNT3");
         server.verify();
@@ -121,7 +121,7 @@ class ThesesItemReaderTest {
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         server.expect(requestTo(pageUri(0, 10))).andRespond(withNoContent());
 
-        ThesesItemReader reader = new ThesesItemReader(builder.build(), 10, false);
+        DatagouvThesesItemReader reader = new DatagouvThesesItemReader(builder.build(), 10, false);
 
         assertThatThrownBy(reader::read)
                 .isInstanceOf(IllegalStateException.class)
@@ -135,7 +135,7 @@ class ThesesItemReaderTest {
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         server.expect(requestTo(pageUri(0, 10))).andRespond(withNoContent());
 
-        ThesesItemReader reader = new ThesesItemReader(builder.build(), 10, true);
+        DatagouvThesesItemReader reader = new DatagouvThesesItemReader(builder.build(), 10, true);
 
         assertThat(reader.read()).isNull();
         assertThat(reader.read()).isNull();
@@ -149,7 +149,7 @@ class ThesesItemReaderTest {
         server.expect(requestTo(pageUri(0, 10)))
                 .andRespond(withSuccess("{\"totalHits\":0}", MediaType.APPLICATION_JSON));
 
-        ThesesItemReader reader = new ThesesItemReader(builder.build(), 10, false);
+        DatagouvThesesItemReader reader = new DatagouvThesesItemReader(builder.build(), 10, false);
 
         assertThatThrownBy(reader::read)
                 .isInstanceOf(IllegalStateException.class)
@@ -157,7 +157,7 @@ class ThesesItemReaderTest {
         server.verify();
     }
 
-    private static List<Thesis> readAll(ThesesItemReader reader) {
+    private static List<Thesis> readAll(DatagouvThesesItemReader reader) {
         List<Thesis> result = new ArrayList<>();
         for (Thesis t = reader.read(); t != null; t = reader.read()) {
             result.add(t);

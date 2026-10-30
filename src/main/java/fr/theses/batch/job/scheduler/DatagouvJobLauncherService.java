@@ -1,4 +1,4 @@
-package fr.theses.batch.job.datagouv.scheduler;
+package fr.theses.batch.job.scheduler;
 
 import fr.theses.batch.job.RunTimestamp;
 import lombok.extern.slf4j.Slf4j;
@@ -75,7 +75,7 @@ public class DatagouvJobLauncherService {
         }
         log.info("Vérification des conditions d'exécution de la tâche thesesDumpDataGouvJob...");
 
-        JobRunDecider decider = new JobRunDecider(jobRepository, thesesDumpDataGouvJob.getName(), forceRun, modeTest);
+        DatagouvJobRunDecider decider = new DatagouvJobRunDecider(jobRepository, thesesDumpDataGouvJob.getName(), forceRun, modeTest);
 
         if (decider.shouldRun()) {
             log.info("Conditions réunies. Démarrage de la tâche thesesDumpDataGouvJob...");
@@ -84,9 +84,9 @@ public class DatagouvJobLauncherService {
             JobParameters params = new JobParametersBuilder()
                     .addLong("runTime", runTimeVal)
                     .addString("runTimestamp", runTimestamp.value())
-                    // Non identifiants : servent à JobRunDecider pour ne compter que les vraies publications
-                    .addString(JobRunDecider.PARAM_MODE_TEST, String.valueOf(modeTest), false)
-                    .addString(JobRunDecider.PARAM_UPLOAD_ENABLED, String.valueOf(uploadEnabled), false)
+                    // Non identifiants : servent à DatagouvJobRunDecider pour ne compter que les vraies publications
+                    .addString(DatagouvJobRunDecider.PARAM_MODE_TEST, String.valueOf(modeTest), false)
+                    .addString(DatagouvJobRunDecider.PARAM_UPLOAD_ENABLED, String.valueOf(uploadEnabled), false)
                     .toJobParameters();
 
             JobExecution execution = jobOperator.start(thesesDumpDataGouvJob, params);

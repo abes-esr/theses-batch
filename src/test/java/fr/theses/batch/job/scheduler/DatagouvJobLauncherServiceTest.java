@@ -1,4 +1,4 @@
-package fr.theses.batch.job.datagouv.scheduler;
+package fr.theses.batch.job.scheduler;
 
 import fr.theses.batch.job.RunTimestamp;
 import org.junit.jupiter.api.BeforeEach;
@@ -75,10 +75,10 @@ class DatagouvJobLauncherServiceTest {
         verify(jobOperator).start(eq(job), params.capture());
         assertThat(params.getValue().getString("runTimestamp")).isEqualTo("2026-01-02-03-04-05");
         assertThat(params.getValue().getLong("runTime")).isPositive();
-        // Paramètres non identifiants lus par JobRunDecider : ce run ne compte pas comme une publication
-        assertThat(params.getValue().getString(JobRunDecider.PARAM_MODE_TEST)).isEqualTo("true");
-        assertThat(params.getValue().getString(JobRunDecider.PARAM_UPLOAD_ENABLED)).isEqualTo("false");
-        assertThat(params.getValue().getParameter(JobRunDecider.PARAM_MODE_TEST).identifying()).isFalse();
+        // Paramètres non identifiants lus par DatagouvJobRunDecider : ce run ne compte pas comme une publication
+        assertThat(params.getValue().getString(DatagouvJobRunDecider.PARAM_MODE_TEST)).isEqualTo("true");
+        assertThat(params.getValue().getString(DatagouvJobRunDecider.PARAM_UPLOAD_ENABLED)).isEqualTo("false");
+        assertThat(params.getValue().getParameter(DatagouvJobRunDecider.PARAM_MODE_TEST).identifying()).isFalse();
     }
 
     @Test

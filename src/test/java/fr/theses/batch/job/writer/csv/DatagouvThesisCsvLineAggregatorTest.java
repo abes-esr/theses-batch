@@ -1,4 +1,4 @@
-package fr.theses.batch.job.datagouv.writer;
+package fr.theses.batch.job.writer.csv;
 
 import fr.theses.batch.business.datagouv.model.ExportOrganization;
 import fr.theses.batch.business.datagouv.model.ExportPerson;
@@ -22,18 +22,18 @@ import java.util.stream.IntStream;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Tests unitaires pour ThesisCsvLineAggregator.
+ * Tests unitaires pour DatagouvThesisCsvLineAggregator.
  */
-class ThesisCsvLineAggregatorTest {
+class DatagouvThesisCsvLineAggregatorTest {
 
     // Nombre de colonnes de l'en-tête écrit par DatagouvBatchConfiguration.datagouvCsvWriter
     private static final int COLUMN_COUNT = 213;
 
-    private ThesisCsvLineAggregator aggregator;
+    private DatagouvThesisCsvLineAggregator aggregator;
 
     @BeforeEach
     void setUp() {
-        aggregator = new ThesisCsvLineAggregator();
+        aggregator = new DatagouvThesisCsvLineAggregator();
     }
 
     private static ExportThesis empty() {

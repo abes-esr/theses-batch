@@ -1,4 +1,4 @@
-package fr.theses.batch.job.datagouv.writer;
+package fr.theses.batch.job.writer.json;
 
 import fr.theses.batch.business.datagouv.model.ExportThesis;
 import org.springframework.batch.infrastructure.item.file.transform.LineAggregator;
@@ -10,7 +10,7 @@ import tools.jackson.databind.ObjectMapper;
  * Agrégateur de ligne JSONL (JSON Lines) transformant un objet ExportThesis 
  * en sa représentation JSON compacte sur une seule ligne.
  */
-public class JsonlLineAggregator implements LineAggregator<ExportThesis> {
+public class DatagouvJsonlLineAggregator implements LineAggregator<ExportThesis> {
 
     private final ObjectMapper objectMapper;
 
@@ -19,7 +19,7 @@ public class JsonlLineAggregator implements LineAggregator<ExportThesis> {
      *
      * @param objectMapper L'instance ObjectMapper de Spring.
      */
-    public JsonlLineAggregator(ObjectMapper objectMapper) {
+    public DatagouvJsonlLineAggregator(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
     }
 

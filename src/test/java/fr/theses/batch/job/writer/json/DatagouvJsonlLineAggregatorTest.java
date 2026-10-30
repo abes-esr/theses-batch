@@ -1,4 +1,4 @@
-package fr.theses.batch.job.datagouv.writer;
+package fr.theses.batch.job.writer.json;
 
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
@@ -14,15 +14,15 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
- * Tests unitaires de JsonlLineAggregator.
+ * Tests unitaires de DatagouvJsonlLineAggregator.
  */
-class JsonlLineAggregatorTest {
+class DatagouvJsonlLineAggregatorTest {
 
-    private JsonlLineAggregator aggregator;
+    private DatagouvJsonlLineAggregator aggregator;
 
     @BeforeEach
     void setUp() {
-        aggregator = new JsonlLineAggregator(new ObjectMapper());
+        aggregator = new DatagouvJsonlLineAggregator(new ObjectMapper());
     }
 
     @Test
@@ -50,7 +50,7 @@ class JsonlLineAggregatorTest {
         ObjectMapper mapper = mock(ObjectMapper.class);
         JacksonException cause = mock(JacksonException.class);
         when(mapper.writeValueAsString(any())).thenThrow(cause);
-        JsonlLineAggregator failing = new JsonlLineAggregator(mapper);
+        DatagouvJsonlLineAggregator failing = new DatagouvJsonlLineAggregator(mapper);
         ExportThesis export = minimalExport();
 
         assertThatThrownBy(() -> failing.aggregate(export))
@@ -63,7 +63,7 @@ class JsonlLineAggregatorTest {
     void aggregate_serialisationNulle_leveIllegalStateException() {
         ObjectMapper mapper = mock(ObjectMapper.class);
         when(mapper.writeValueAsString(any())).thenReturn(null);
-        JsonlLineAggregator failing = new JsonlLineAggregator(mapper);
+        DatagouvJsonlLineAggregator failing = new DatagouvJsonlLineAggregator(mapper);
         ExportThesis export = minimalExport();
 
         assertThatThrownBy(() -> failing.aggregate(export))

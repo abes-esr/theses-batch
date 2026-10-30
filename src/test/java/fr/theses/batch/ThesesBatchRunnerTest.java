@@ -1,6 +1,6 @@
 package fr.theses.batch;
 
-import fr.theses.batch.job.datagouv.scheduler.DatagouvJobLauncherService;
+import fr.theses.batch.job.scheduler.DatagouvJobLauncherService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.batch.core.BatchStatus;

@@ -80,6 +80,8 @@ app:
     json:
       pretty-print: ${THESES_BATCH_ANR_JSON_PRETTY_PRINT:true}
   datagouv:
+    # URL de base de data.gouv.fr (https://www.data.gouv.fr en production, https://demo.data.gouv.fr pour tester)
+    base-url: ${DATA_GOUV_BASE_URL:}
     api-key: ${DATA_GOUV_API_KEY:}
     dataset-id: ${DATA_GOUV_DATASET_ID:}
     csv-resource-id: ${DATA_GOUV_CSV_RESOURCE_ID:}
@@ -98,7 +100,7 @@ app:
     read-timeout: ${THESES_READ_TIMEOUT:60s}
   solr:
     enabled: ${THESES_BATCH_SOLR_ENABLED:true}
-    base-url: ${THESES_BATCH_SOLR_BASE_URL:http://denim.v102.abes.fr:8080/solr1}
+    base-url: ${THESES_BATCH_SOLR_BASE_URL:}
     id-field: ${THESES_BATCH_SOLR_ID_FIELD:id}
     nnt-field: ${THESES_BATCH_SOLR_NNT_FIELD:nnt}
     doi-field: ${THESES_BATCH_SOLR_DOI_FIELD:doi}

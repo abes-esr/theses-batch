@@ -1,4 +1,4 @@
-package fr.theses.batch.job.datagouv.writer;
+package fr.theses.batch.job.writer.csv;
 
 import fr.theses.batch.business.datagouv.model.ExportOrganization;
 import fr.theses.batch.business.datagouv.model.ExportPerson;
@@ -19,9 +19,9 @@ import java.util.Map;
  * <p>
  * Le nombre de colonnes du format historique est fixe : les valeurs au-delà (membres du jury,
  * sujets RAMEAU, auteurs supplémentaires, cotutelles...) ne figurent que dans le JSON et le JSONL,
- * et sont comptabilisées dans un {@link CsvTruncationReport}.
+ * et sont comptabilisées dans un {@link DatagouvCsvTruncationReport}.
  */
-public class ThesisCsvLineAggregator implements LineAggregator<ExportThesis> {
+public class DatagouvThesisCsvLineAggregator implements LineAggregator<ExportThesis> {
 
     // Délimiteur virgule standard
     private static final CSVFormat CSV_FORMAT = CSVFormat.DEFAULT.builder()
@@ -49,12 +49,12 @@ public class ThesisCsvLineAggregator implements LineAggregator<ExportThesis> {
             6, 7, 8, 9
     };
 
-    private final CsvTruncationReport truncationReport = new CsvTruncationReport();
+    private final DatagouvCsvTruncationReport truncationReport = new DatagouvCsvTruncationReport();
 
     /**
      * @return Le décompte des valeurs qui n'ont pas trouvé place dans le CSV depuis le début de l'export.
      */
-    public CsvTruncationReport getTruncationReport() {
+    public DatagouvCsvTruncationReport getTruncationReport() {
         return truncationReport;
     }
 

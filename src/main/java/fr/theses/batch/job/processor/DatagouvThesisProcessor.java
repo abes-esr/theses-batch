@@ -1,4 +1,4 @@
-package fr.theses.batch.job.datagouv.processor;
+package fr.theses.batch.job.processor;
 
 import fr.theses.batch.business.datagouv.model.ExportOrganization;
 import fr.theses.batch.business.datagouv.model.ExportPerson;
@@ -23,7 +23,7 @@ import java.util.TreeMap;
  * Processeur chargé de nettoyer, harmoniser et transformer les données d'une thèse
  * du format API brute (Thesis) vers le format d'export historique (ExportThesis).
  */
-public class ThesisProcessor implements ItemProcessor<Thesis, ExportThesis> {
+public class DatagouvThesisProcessor implements ItemProcessor<Thesis, ExportThesis> {
 
     /**
      * Traite un élément Thesis brut pour générer le DTO d'export ExportThesis.

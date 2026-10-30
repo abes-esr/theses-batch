@@ -1,4 +1,4 @@
-package fr.theses.batch.job.datagouv.tasklet;
+package fr.theses.batch.job.tasklet;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -18,9 +18,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 
 /**
- * Tests unitaires de GzipTasklet.
+ * Tests unitaires de DatagouvGzipTasklet.
  */
-class GzipTaskletTest {
+class DatagouvGzipTaskletTest {
 
     private static final String RUN = "2026-01-01-12-00-00";
 
@@ -32,7 +32,7 @@ class GzipTaskletTest {
         String jsonl = "{\"nnt\":\"2020PA01\"}\n{\"nnt\":\"2021PA02\"}\n";
         Files.writeString(tempDir.resolve(RUN + "_datagouv_results.jsonl"), jsonl);
 
-        RepeatStatus status = new GzipTasklet(tempDir.toString(), RUN)
+        RepeatStatus status = new DatagouvGzipTasklet(tempDir.toString(), RUN)
                 .execute(mock(StepContribution.class), mock(ChunkContext.class));
 
         assertThat(status).isEqualTo(RepeatStatus.FINISHED);
@@ -43,7 +43,7 @@ class GzipTaskletTest {
 
     @Test
     void execute_jsonlAbsent_leveException() {
-        GzipTasklet tasklet = new GzipTasklet(tempDir.toString(), RUN);
+        DatagouvGzipTasklet tasklet = new DatagouvGzipTasklet(tempDir.toString(), RUN);
 
         assertThatThrownBy(() -> tasklet.execute(mock(StepContribution.class), mock(ChunkContext.class)))
                 .isInstanceOf(IllegalStateException.class)

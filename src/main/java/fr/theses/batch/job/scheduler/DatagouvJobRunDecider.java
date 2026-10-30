@@ -1,4 +1,4 @@
-package fr.theses.batch.job.datagouv.scheduler;
+package fr.theses.batch.job.scheduler;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.batch.core.BatchStatus;
@@ -20,7 +20,7 @@ import java.util.Optional;
  * et gère également l'option de forçage manuel (FORCE_RUN) et le mode test.
  */
 @Slf4j
-public class JobRunDecider {
+public class DatagouvJobRunDecider {
 
     /** Paramètre d'exécution : "true" si l'export a été fait en mode test. */
     public static final String PARAM_MODE_TEST = "modeTest";
@@ -40,7 +40,7 @@ public class JobRunDecider {
      * @param forceRun    Vrai si le lancement immédiat est forcé.
      * @param modeTest    Vrai si le mode test est activé.
      */
-    public JobRunDecider(JobRepository jobRepository, String jobName, boolean forceRun, boolean modeTest) {
+    public DatagouvJobRunDecider(JobRepository jobRepository, String jobName, boolean forceRun, boolean modeTest) {
         this.jobRepository = jobRepository;
         this.jobName = jobName;
         this.forceRun = forceRun;

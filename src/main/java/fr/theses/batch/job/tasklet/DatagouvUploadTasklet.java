@@ -1,4 +1,4 @@
-package fr.theses.batch.job.datagouv.tasklet;
+package fr.theses.batch.job.tasklet;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.batch.core.scope.context.ChunkContext;
@@ -32,14 +32,16 @@ import java.util.UUID;
  * découpé de udata) : seul un morceau à la fois est chargé en mémoire, quelle que soit la
  * taille du fichier.
  * <p>
- * Si le mode test ou upload-enabled=false est configuré, l'upload est ignoré.
+ * Si le mode test ou upload-enabled=false est configuré, l'upload est ignoré : un export
+ * de test (limité à 50 thèses) ne doit jamais remplacer les ressources publiées.
  */
 @Slf4j
-public class UploadTasklet implements Tasklet {
+public class DatagouvUploadTasklet implements Tasklet {
 
-    private static final String UPLOAD_URI = "https://www.data.gouv.fr/api/1/datasets/{datasetId}/resources/{resourceId}/upload/";
+    private static final String UPLOAD_PATH = "/api/1/datasets/{datasetId}/resources/{resourceId}/upload/";
 
     private final RestClient restClient;
+    private final String baseUrl;
     private final String datasetId;
     private final String csvResourceId;
     private final String jsonResourceId;
@@ -48,6 +50,7 @@ public class UploadTasklet implements Tasklet {
     private final String apiKey;
     private final String outputDir;
     private final boolean uploadEnabled;
+    private final boolean modeTest;
     private final String runTimestamp;
     private final int chunkSize;
 
@@ -55,6 +58,7 @@ public class UploadTasklet implements Tasklet {
      * Constructeur initialisant les dépendances et les identifiants de ressources data.gouv.fr.
      *
      * @param restClient         Client HTTP configuré pour l'API data.gouv.fr.
+     * @param baseUrl            URL de base de data.gouv.fr (ex: https://www.data.gouv.fr, https://demo.data.gouv.fr).
      * @param datasetId          Identifiant du jeu de données cible sur data.gouv.fr.
      * @param csvResourceId      Identifiant de la ressource pour le fichier CSV.
      * @param jsonResourceId     Identifiant de la ressource pour le fichier JSON.
@@ -63,17 +67,20 @@ public class UploadTasklet implements Tasklet {
      * @param apiKey             Clé d'API data.gouv.fr.
      * @param outputDir          Répertoire local contenant les fichiers générés.
      * @param uploadEnabled      Indique si le téléversement effectif est activé.
+     * @param modeTest           Vrai si le mode test est activé : le téléversement est alors toujours ignoré.
      * @param runTimestamp       Horodatage du run au format yyyy-MM-dd-HH-mm-ss.
      * @param chunkSize          Taille maximale en octets d'un morceau envoyé.
      */
-    public UploadTasklet(RestClient restClient, String datasetId, String csvResourceId,
+    public DatagouvUploadTasklet(RestClient restClient, String baseUrl, String datasetId, String csvResourceId,
                          String jsonResourceId, String jsonlResourceId, String jsonlGzResourceId,
-                         String apiKey, String outputDir, boolean uploadEnabled, String runTimestamp,
+                         String apiKey, String outputDir, boolean uploadEnabled, boolean modeTest, String runTimestamp,
                          int chunkSize) {
         if (chunkSize <= 0) {
             throw new IllegalArgumentException("La taille des morceaux d'upload doit être positive : " + chunkSize);
         }
         this.restClient = restClient;
+        // Sans « / » final : UPLOAD_PATH commence déjà par « / »
+        this.baseUrl = baseUrl == null ? null : baseUrl.replaceAll("/+$", "");
         this.datasetId = datasetId;
         this.csvResourceId = csvResourceId;
         this.jsonResourceId = jsonResourceId;
@@ -82,6 +89,7 @@ public class UploadTasklet implements Tasklet {
         this.apiKey = apiKey;
         this.outputDir = outputDir;
         this.uploadEnabled = uploadEnabled;
+        this.modeTest = modeTest;
         this.runTimestamp = runTimestamp;
         this.chunkSize = chunkSize;
     }
@@ -98,6 +106,12 @@ public class UploadTasklet implements Tasklet {
      */
     @Override
     public RepeatStatus execute(@NonNull StepContribution contribution, @NonNull ChunkContext chunkContext) throws IOException {
+        if (modeTest) {
+            log.info("Mode test actif : téléversement vers data.gouv.fr ignoré, quelle que soit la valeur de app.datagouv.upload-enabled.");
+            log.info("Les 4 fichiers d'export ont été déposés et restent disponibles dans le dossier : {}",
+                    new File(outputDir).getAbsolutePath());
+            return RepeatStatus.FINISHED;
+        }
         if (!uploadEnabled) {
             log.info("Téléversement vers data.gouv.fr désactivé (app.datagouv.upload-enabled = false).");
             log.info("Les 4 fichiers d'export ont été déposés et restent disponibles dans le dossier : {}",
@@ -125,6 +139,7 @@ public class UploadTasklet implements Tasklet {
      */
     private void checkReadyToUpload() {
         Map<String, String> settings = new LinkedHashMap<>();
+        settings.put("DATA_GOUV_BASE_URL", baseUrl);
         settings.put("DATA_GOUV_API_KEY", apiKey);
         settings.put("DATA_GOUV_DATASET_ID", datasetId);
         settings.put("DATA_GOUV_CSV_RESOURCE_ID", csvResourceId);
@@ -218,7 +233,7 @@ public class UploadTasklet implements Tasklet {
 
     private void post(String resourceId, MultiValueMap<String, Object> body) {
         restClient.post()
-                .uri(UPLOAD_URI, datasetId, resourceId)
+                .uri(baseUrl + UPLOAD_PATH, datasetId, resourceId)
                 .header("X-API-KEY", apiKey)
                 .contentType(MediaType.MULTIPART_FORM_DATA)
                 .body(body)

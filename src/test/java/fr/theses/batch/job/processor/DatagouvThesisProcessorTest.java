@@ -1,4 +1,4 @@
-package fr.theses.batch.job.datagouv.processor;
+package fr.theses.batch.job.processor;
 
 import fr.theses.batch.business.datagouv.model.ExportOrganization;
 import fr.theses.batch.business.datagouv.model.ExportPerson;
@@ -13,19 +13,19 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Tests unitaires du processeur ThesisProcessor pour data.gouv.fr.
+ * Tests unitaires du processeur DatagouvThesisProcessor pour data.gouv.fr.
  * Les thèses sont lues depuis du JSON au format de l'API /api/v1/batch/theses/recherche/
  * (BatchTheseResponseDto de theses-api-recherche), pour vérifier aussi les noms des champs.
  */
-class ThesisProcessorTest {
+class DatagouvThesisProcessorTest {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
-    private ThesisProcessor processor;
+    private DatagouvThesisProcessor processor;
 
     @BeforeEach
     void setUp() {
-        processor = new ThesisProcessor();
+        processor = new DatagouvThesisProcessor();
     }
 
     private static Thesis thesis(String json) {

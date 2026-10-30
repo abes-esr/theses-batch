@@ -1,4 +1,4 @@
-package fr.theses.batch.job.datagouv.reader;
+package fr.theses.batch.job.reader;
 
 import fr.theses.batch.business.datagouv.model.ThesesResponse;
 import fr.theses.batch.business.datagouv.model.Thesis;
@@ -21,7 +21,7 @@ import java.util.Set;
  * (totalHits dépassé) sont acceptées.
  */
 @Slf4j
-public class ThesesItemReader implements ItemReader<Thesis> {
+public class DatagouvThesesItemReader implements ItemReader<Thesis> {
 
     private final RestClient restClient;
     private final int pageSize;
@@ -46,7 +46,7 @@ public class ThesesItemReader implements ItemReader<Thesis> {
      * @param pageSize   Taille d'une page de résultats.
      * @param modeTest   Vrai si le mode test (limité à 50 thèses) est activé.
      */
-    public ThesesItemReader(RestClient restClient, int pageSize, boolean modeTest) {
+    public DatagouvThesesItemReader(RestClient restClient, int pageSize, boolean modeTest) {
         this.restClient = restClient;
         this.pageSize = pageSize;
         this.modeTest = modeTest;

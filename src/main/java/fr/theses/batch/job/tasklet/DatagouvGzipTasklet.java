@@ -1,4 +1,4 @@
-package fr.theses.batch.job.datagouv.tasklet;
+package fr.theses.batch.job.tasklet;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.batch.core.scope.context.ChunkContext;
@@ -18,7 +18,7 @@ import java.util.zip.GZIPOutputStream;
  * Le fichier est lu et compressé en flux : la mémoire utilisée ne dépend pas de sa taille.
  */
 @Slf4j
-public class GzipTasklet implements Tasklet {
+public class DatagouvGzipTasklet implements Tasklet {
 
     private final File source;
     private final File target;
@@ -27,7 +27,7 @@ public class GzipTasklet implements Tasklet {
      * @param outputDir    Répertoire local contenant les fichiers générés.
      * @param runTimestamp Horodatage du run au format yyyy-MM-dd-HH-mm-ss.
      */
-    public GzipTasklet(String outputDir, String runTimestamp) {
+    public DatagouvGzipTasklet(String outputDir, String runTimestamp) {
         this.source = new File(outputDir, runTimestamp + "_datagouv_results.jsonl");
         this.target = new File(outputDir, runTimestamp + "_datagouv_results.jsonl.gz");
     }

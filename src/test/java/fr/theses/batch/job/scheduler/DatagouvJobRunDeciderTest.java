@@ -1,4 +1,4 @@
-package fr.theses.batch.job.datagouv.scheduler;
+package fr.theses.batch.job.scheduler;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.batch.core.BatchStatus;
@@ -18,9 +18,9 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
- * Tests unitaires de JobRunDecider.
+ * Tests unitaires de DatagouvJobRunDecider.
  */
-class JobRunDeciderTest {
+class DatagouvJobRunDeciderTest {
 
     private final JobRepository jobRepository = mock(JobRepository.class);
     private final String jobName = "thesesDumpDataGouvJob";
@@ -29,8 +29,8 @@ class JobRunDeciderTest {
 
     private static JobParameters params(String modeTest, String uploadEnabled) {
         return new JobParametersBuilder()
-                .addString(JobRunDecider.PARAM_MODE_TEST, modeTest, false)
-                .addString(JobRunDecider.PARAM_UPLOAD_ENABLED, uploadEnabled, false)
+                .addString(DatagouvJobRunDecider.PARAM_MODE_TEST, modeTest, false)
+                .addString(DatagouvJobRunDecider.PARAM_UPLOAD_ENABLED, uploadEnabled, false)
                 .toJobParameters();
     }
 
@@ -57,18 +57,18 @@ class JobRunDeciderTest {
     }
 
     private boolean shouldRun() {
-        return new JobRunDecider(jobRepository, jobName, false, false).shouldRun();
+        return new DatagouvJobRunDecider(jobRepository, jobName, false, false).shouldRun();
     }
 
     @Test
     void shouldRun_modeTest_retourneTrue() {
-        JobRunDecider decider = new JobRunDecider(jobRepository, jobName, false, true);
+        DatagouvJobRunDecider decider = new DatagouvJobRunDecider(jobRepository, jobName, false, true);
         assertThat(decider.shouldRun()).isTrue();
     }
 
     @Test
     void shouldRun_forceRun_retourneTrue() {
-        JobRunDecider decider = new JobRunDecider(jobRepository, jobName, true, false);
+        DatagouvJobRunDecider decider = new DatagouvJobRunDecider(jobRepository, jobName, true, false);
         assertThat(decider.shouldRun()).isTrue();
     }
 

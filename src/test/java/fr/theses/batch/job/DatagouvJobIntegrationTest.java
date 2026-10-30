@@ -2,6 +2,8 @@ package fr.theses.batch.job;
 
 import com.sun.net.httpserver.HttpServer;
 import fr.theses.batch.support.TestPdfs;
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVRecord;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -21,6 +23,7 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.io.StringReader;
 import java.io.UncheckedIOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -151,15 +154,25 @@ class DatagouvJobIntegrationTest {
         assertThat(fetch.getReadCount()).isEqualTo(2);
         assertThat(fetch.getWriteCount()).isEqualTo(2);
         assertThat(execution.getStepExecutions()).extracting(StepExecution::getStepName)
-                .containsExactly("fetchAndWriteStep", "gzipStep", "uploadStep");
+                .containsExactly("fetchAndWriteStep", "csvStep", "gzipStep", "uploadStep");
 
         List<String> csv = Files.readAllLines(outputDir.resolve(RUN + "_datagouv_results.csv"));
         assertThat(csv).hasSize(3);
         assertThat(csv.getFirst()).startsWith("﻿\"accessible\",\"auteur.idref\"");
-        assertThat(csv.get(1)).startsWith("oui,111111111,Dupont,Jean,,,2023-06-15");
-        assertThat(csv.get(1)).contains("Université de Montpellier", "Polymères", "Polymers", "Rameau un",
-                "Título uno,,,,Title one,Titre un");
         assertThat(csv.get(2)).contains("\"Titre deux, avec virgule\"");
+        // CSV = JSONL aplati : toutes les valeurs y figurent, y compris celles sans colonne dans l'ancien format
+        List<CSVRecord> records = CSVFormat.DEFAULT.builder().setHeader().setSkipHeaderRecord(true).build()
+                .parse(new StringReader(String.join("\n", csv).substring(1))).getRecords();
+        assertThat(records).hasSize(2);
+        CSVRecord first = records.getFirst();
+        assertThat(first.get("nnt")).isEqualTo("2023MONT0001");
+        assertThat(first.get("auteur.nom")).isEqualTo("Dupont");
+        assertThat(first.get("auteurs.1.nom")).isEqualTo("Durand");
+        assertThat(first.get("etablissements_cotutelle.0.nom")).isEqualTo("Université Laval");
+        assertThat(first.get("etablissements_soutenance.0.nom")).isEqualTo("Université de Montpellier");
+        assertThat(first.get("titres.es")).isEqualTo("Título uno");
+        assertThat(first.get("date_soutenance")).isEqualTo("2023-06-15");
+        assertThat(records.get(1).get("auteurs.1.nom")).isEmpty();
 
         List<String> jsonl = Files.readAllLines(outputDir.resolve(RUN + "_datagouv_results.jsonl"));
         assertThat(jsonl).hasSize(2);
@@ -177,10 +190,5 @@ class DatagouvJobIntegrationTest {
         ObjectMapper mapper = new ObjectMapper();
         List<JsonNode> jsonlNodes = jsonl.stream().map(mapper::readTree).toList();
         assertThat(mapper.readTree(json).valueStream().toList()).isEqualTo(jsonlNodes);
-
-        // Le second auteur et la cotutelle n'ont pas de colonne dans le CSV : le rapport le signale
-        assertThat(Files.readAllLines(outputDir.resolve(RUN + "_datagouv_troncatures.txt"))).contains(
-                "auteurs : 1 thèse(s) au-delà de 1 valeur(s), maximum rencontré 2",
-                "etablissements_cotutelle : 1 thèse(s) au-delà de 0 valeur(s), maximum rencontré 1");
     }
 }

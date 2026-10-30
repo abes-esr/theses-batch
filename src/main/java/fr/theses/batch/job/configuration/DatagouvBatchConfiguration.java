@@ -5,11 +5,10 @@ import fr.theses.batch.business.datagouv.model.Thesis;
 import fr.theses.batch.job.RunTimestamp;
 import fr.theses.batch.job.processor.DatagouvThesisProcessor;
 import fr.theses.batch.job.reader.DatagouvThesesItemReader;
+import fr.theses.batch.job.tasklet.DatagouvCsvTasklet;
 import fr.theses.batch.job.tasklet.DatagouvGzipTasklet;
 import fr.theses.batch.job.tasklet.DatagouvUploadTasklet;
-import fr.theses.batch.job.writer.csv.DatagouvCsvTruncationReportListener;
 import fr.theses.batch.job.writer.json.DatagouvJsonlLineAggregator;
-import fr.theses.batch.job.writer.csv.DatagouvThesisCsvLineAggregator;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.batch.core.configuration.annotation.StepScope;
 import org.springframework.batch.core.job.Job;
@@ -37,7 +36,6 @@ import org.springframework.util.unit.DataSize;
 import org.springframework.web.client.RestClient;
 
 import java.io.File;
-import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 
@@ -102,47 +100,6 @@ public class DatagouvBatchConfiguration {
     }
 
     /**
-     * Agrégateur des lignes CSV, qui compte aussi les valeurs tronquées pendant l'étape.
-     */
-    @Bean
-    @StepScope
-    public DatagouvThesisCsvLineAggregator datagouvCsvLineAggregator() {
-        return new DatagouvThesisCsvLineAggregator();
-    }
-
-    /**
-     * Rapport des valeurs tronquées dans le CSV, écrit en fin d'étape à côté des exports.
-     */
-    @Bean
-    @StepScope
-    public DatagouvCsvTruncationReportListener csvTruncationReportListener(
-            DatagouvThesisCsvLineAggregator datagouvCsvLineAggregator,
-            @Value("${app.output-dir:output}") String outputDir,
-            RunTimestamp runTimestamp) {
-        return new DatagouvCsvTruncationReportListener(datagouvCsvLineAggregator,
-                Path.of(outputDir, runTimestamp.value() + "_datagouv_troncatures.txt"));
-    }
-
-    /**
-     * Writer écrivant les thèses au format CSV avec BOM UTF-8 et en-tête des 213 colonnes.
-     */
-    @Bean
-    @StepScope
-    public FlatFileItemWriter<ExportThesis> datagouvCsvWriter(
-            @Value("${app.output-dir:output}") String outputDir,
-            RunTimestamp runTimestamp,
-            DatagouvThesisCsvLineAggregator datagouvCsvLineAggregator) {
-        return new FlatFileItemWriterBuilder<ExportThesis>()
-                .name("datagouvCsvWriter")
-                .resource(new FileSystemResource(new File(outputDir, runTimestamp.value() + "_datagouv_results.csv")))
-                .encoding("UTF-8")
-                .headerCallback(headerWriter -> headerWriter.write(
-                        "\uFEFF\"accessible\",\"auteur.idref\",\"auteur.nom\",\"auteur.prenom\",\"cas\",\"code_etab\",\"date_soutenance\",\"directeurs_these.0.idref\",\"directeurs_these.0.nom\",\"directeurs_these.0.prenom\",\"directeurs_these.1.idref\",\"directeurs_these.1.nom\",\"directeurs_these.1.prenom\",\"directeurs_these.2.idref\",\"directeurs_these.2.nom\",\"directeurs_these.2.prenom\",\"directeurs_these.3.idref\",\"directeurs_these.3.nom\",\"directeurs_these.3.prenom\",\"directeurs_these.4.idref\",\"directeurs_these.4.nom\",\"directeurs_these.4.prenom\",\"directeurs_these.5.idref\",\"directeurs_these.5.nom\",\"directeurs_these.5.prenom\",\"directeurs_these.6.idref\",\"directeurs_these.6.nom\",\"directeurs_these.6.prenom\",\"discipline\",\"ecoles_doctorales.0.idref\",\"ecoles_doctorales.0.nom\",\"ecoles_doctorales.1.idref\",\"ecoles_doctorales.1.nom\",\"embargo\",\"etablissements_soutenance.0.idref\",\"etablissements_soutenance.0.nom\",\"etablissements_soutenance.1.idref\",\"etablissements_soutenance.1.nom\",\"etablissements_soutenance.2.idref\",\"etablissements_soutenance.2.nom\",\"etablissements_soutenance.3.idref\",\"etablissements_soutenance.3.nom\",\"etablissements_soutenance.4.idref\",\"etablissements_soutenance.4.nom\",\"langues.0\",\"langues.1\",\"langues.2\",\"langues.3\",\"membres_jury.0.idref\",\"membres_jury.0.nom\",\"membres_jury.0.prenom\",\"membres_jury.10.idref\",\"membres_jury.10.nom\",\"membres_jury.10.prenom\",\"membres_jury.11.idref\",\"membres_jury.11.nom\",\"membres_jury.11.prenom\",\"membres_jury.1.idref\",\"membres_jury.1.nom\",\"membres_jury.1.prenom\",\"membres_jury.2.idref\",\"membres_jury.2.nom\",\"membres_jury.2.prenom\",\"membres_jury.3.idref\",\"membres_jury.3.nom\",\"membres_jury.3.prenom\",\"membres_jury.4.idref\",\"membres_jury.4.nom\",\"membres_jury.4.prenom\",\"membres_jury.5.idref\",\"membres_jury.5.nom\",\"membres_jury.5.prenom\",\"membres_jury.6.idref\",\"membres_jury.6.nom\",\"membres_jury.6.prenom\",\"membres_jury.7.idref\",\"membres_jury.7.nom\",\"membres_jury.7.prenom\",\"membres_jury.8.idref\",\"membres_jury.8.nom\",\"membres_jury.8.prenom\",\"membres_jury.9.idref\",\"membres_jury.9.nom\",\"membres_jury.9.prenom\",\"nnt\",\"oai_set_specs\",\"partenaires_recherche.0.idref\",\"partenaires_recherche.0.nom\",\"partenaires_recherche.0.type\",\"partenaires_recherche.1.idref\",\"partenaires_recherche.1.nom\",\"partenaires_recherche.1.type\",\"partenaires_recherche.2.idref\",\"partenaires_recherche.2.nom\",\"partenaires_recherche.2.type\",\"partenaires_recherche.3.idref\",\"partenaires_recherche.3.nom\",\"partenaires_recherche.3.type\",\"partenaires_recherche.4.idref\",\"partenaires_recherche.4.nom\",\"partenaires_recherche.4.type\",\"partenaires_recherche.5.idref\",\"partenaires_recherche.5.nom\",\"partenaires_recherche.5.type\",\"partenaires_recherche.6.idref\",\"partenaires_recherche.6.nom\",\"partenaires_recherche.6.type\",\"partenaires_recherche.7.idref\",\"partenaires_recherche.7.nom\",\"partenaires_recherche.7.type\",\"president_jury.idref\",\"president_jury.nom\",\"president_jury.prenom\",\"rapporteurs.0.idref\",\"rapporteurs.0.nom\",\"rapporteurs.0.prenom\",\"rapporteurs.1.idref\",\"rapporteurs.1.nom\",\"rapporteurs.1.prenom\",\"rapporteurs.2.idref\",\"rapporteurs.2.nom\",\"rapporteurs.2.prenom\",\"rapporteurs.3.idref\",\"rapporteurs.3.nom\",\"rapporteurs.3.prenom\",\"rapporteurs.4.idref\",\"rapporteurs.4.nom\",\"rapporteurs.4.prenom\",\"rapporteurs.5.idref\",\"rapporteurs.5.nom\",\"rapporteurs.5.prenom\",\"resumes.autre.0\",\"resumes.autre.1\",\"resumes.autre.2\",\"resumes.autre.3\",\"resumes.autre.4\",\"resumes.autre.5\",\"resumes.en\",\"resumes.fr\",\"source\",\"status\",\"sujets.autre.0\",\"sujets.autre.1\",\"sujets.autre.2\",\"sujets.autre.3\",\"sujets.autre.4\",\"sujets.autre.5\",\"sujets.autre.6\",\"sujets.autre.7\",\"sujets.en\",\"sujets.fr\",\"sujets_rameau.0\",\"sujets_rameau.1\",\"sujets_rameau.10\",\"sujets_rameau.11\",\"sujets_rameau.12\",\"sujets_rameau.13\",\"sujets_rameau.14\",\"sujets_rameau.15\",\"sujets_rameau.16\",\"sujets_rameau.17\",\"sujets_rameau.18\",\"sujets_rameau.19\",\"sujets_rameau.2\",\"sujets_rameau.20\",\"sujets_rameau.21\",\"sujets_rameau.22\",\"sujets_rameau.23\",\"sujets_rameau.24\",\"sujets_rameau.25\",\"sujets_rameau.26\",\"sujets_rameau.27\",\"sujets_rameau.28\",\"sujets_rameau.29\",\"sujets_rameau.3\",\"sujets_rameau.30\",\"sujets_rameau.31\",\"sujets_rameau.32\",\"sujets_rameau.33\",\"sujets_rameau.34\",\"sujets_rameau.35\",\"sujets_rameau.36\",\"sujets_rameau.37\",\"sujets_rameau.38\",\"sujets_rameau.39\",\"sujets_rameau.4\",\"sujets_rameau.40\",\"sujets_rameau.41\",\"sujets_rameau.42\",\"sujets_rameau.43\",\"sujets_rameau.44\",\"sujets_rameau.45\",\"sujets_rameau.46\",\"sujets_rameau.47\",\"sujets_rameau.48\",\"sujets_rameau.49\",\"sujets_rameau.5\",\"sujets_rameau.50\",\"sujets_rameau.51\",\"sujets_rameau.52\",\"sujets_rameau.53\",\"sujets_rameau.54\",\"sujets_rameau.6\",\"sujets_rameau.7\",\"sujets_rameau.8\",\"sujets_rameau.9\",\"these_sur_travaux\",\"titres.autre.0\",\"titres.autre.1\",\"titres.autre.2\",\"titres.autre.3\",\"titres.en\",\"titres.fr\""))
-                .lineAggregator(datagouvCsvLineAggregator)
-                .build();
-    }
-
-    /**
      * Writer écrivant les thèses au format JSONL (une thèse par ligne en JSON).
      */
     @Bean
@@ -177,21 +134,21 @@ public class DatagouvBatchConfiguration {
     }
 
     /**
-     * Writer composite distribuant chaque thèse lue aux 3 formats simultanés (CSV, JSONL, JSON).
+     * Writer composite distribuant chaque thèse lue aux 2 formats simultanés (JSONL, JSON).
+     * Le CSV est généré ensuite à partir du JSONL (csvStep).
      */
     @Bean
     @StepScope
     public CompositeItemWriter<ExportThesis> datagouvCompositeWriter(
-            @Qualifier("datagouvCsvWriter") FlatFileItemWriter<ExportThesis> datagouvCsvWriter,
             @Qualifier("datagouvJsonlWriter") FlatFileItemWriter<ExportThesis> datagouvJsonlWriter,
             @Qualifier("datagouvJsonWriter") JsonFileItemWriter<ExportThesis> datagouvJsonWriter) {
         CompositeItemWriter<ExportThesis> writer = new CompositeItemWriter<>();
-        writer.setDelegates(List.of(datagouvCsvWriter, datagouvJsonlWriter, datagouvJsonWriter));
+        writer.setDelegates(List.of(datagouvJsonlWriter, datagouvJsonWriter));
         return writer;
     }
 
     /**
-     * Étape 1 : Lecture paginée de l'API et écriture simultanée dans les 3 fichiers d'export.
+     * Étape 1 : Lecture paginée de l'API et écriture simultanée du JSONL et du JSON.
      */
     @Bean
     public Step fetchAndWriteStep(JobRepository jobRepository,
@@ -199,20 +156,40 @@ public class DatagouvBatchConfiguration {
                                   DatagouvThesesItemReader thesesReader,
                                   DatagouvThesisProcessor thesisProcessor,
                                   @Qualifier("datagouvCompositeWriter") CompositeItemWriter<ExportThesis> datagouvCompositeWriter,
-                                  @Qualifier("datagouvCsvWriter") FlatFileItemWriter<ExportThesis> datagouvCsvWriter,
                                   @Qualifier("datagouvJsonlWriter") FlatFileItemWriter<ExportThesis> datagouvJsonlWriter,
-                                  @Qualifier("datagouvJsonWriter") JsonFileItemWriter<ExportThesis> datagouvJsonWriter,
-                                  DatagouvCsvTruncationReportListener csvTruncationReportListener) {
+                                  @Qualifier("datagouvJsonWriter") JsonFileItemWriter<ExportThesis> datagouvJsonWriter) {
         return new StepBuilder("fetchAndWriteStep", jobRepository)
                 .<Thesis, ExportThesis>chunk(100)
                 .transactionManager(transactionManager)
                 .reader(thesesReader)
                 .processor(thesisProcessor)
                 .writer(datagouvCompositeWriter)
-                .stream(datagouvCsvWriter)
                 .stream(datagouvJsonlWriter)
                 .stream(datagouvJsonWriter)
-                .listener(csvTruncationReportListener)
+                .build();
+    }
+
+    /**
+     * Tasklet générant le CSV par aplatissement du JSONL.
+     */
+    @Bean
+    @StepScope
+    public DatagouvCsvTasklet csvTasklet(
+            @Value("${app.output-dir:output}") String outputDir,
+            RunTimestamp runTimestamp,
+            JsonMapper jsonMapper) {
+        return new DatagouvCsvTasklet(outputDir, runTimestamp.value(), jsonMapper);
+    }
+
+    /**
+     * Étape 2 : Génération du CSV à partir du JSONL.
+     */
+    @Bean
+    public Step csvStep(JobRepository jobRepository,
+                        PlatformTransactionManager transactionManager,
+                        DatagouvCsvTasklet csvTasklet) {
+        return new StepBuilder("csvStep", jobRepository)
+                .tasklet(csvTasklet, transactionManager)
                 .build();
     }
 
@@ -228,7 +205,7 @@ public class DatagouvBatchConfiguration {
     }
 
     /**
-     * Étape 2 : Compression du fichier JSONL.
+     * Étape 3 : Compression du fichier JSONL.
      */
     @Bean
     public Step gzipStep(JobRepository jobRepository,
@@ -264,7 +241,7 @@ public class DatagouvBatchConfiguration {
     }
 
     /**
-     * Étape 3 : Exécution de la Tasklet d'upload vers data.gouv.fr.
+     * Étape 4 : Exécution de la Tasklet d'upload vers data.gouv.fr.
      */
     @Bean
     public Step uploadStep(JobRepository jobRepository,
@@ -281,11 +258,13 @@ public class DatagouvBatchConfiguration {
     @Bean
     public Job thesesDumpDataGouvJob(JobRepository jobRepository,
                                      @Qualifier("fetchAndWriteStep") Step fetchAndWriteStep,
+                                     @Qualifier("csvStep") Step csvStep,
                                      @Qualifier("gzipStep") Step gzipStep,
                                      @Qualifier("uploadStep") Step uploadStep) {
         return new JobBuilder("thesesDumpDataGouvJob", jobRepository)
                 .incrementer(new RunIdIncrementer())
                 .start(fetchAndWriteStep)
+                .next(csvStep)
                 .next(gzipStep)
                 .next(uploadStep)
                 .build();

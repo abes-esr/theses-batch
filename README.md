@@ -95,9 +95,9 @@ La variable d'environnement `THESES_BATCH_ANR_WRITERS_HEADER` permet d'extraire 
 
 ### 2. `thesesDumpDataGouvJob` : Export et Téléversement data.gouv.fr
 
-Interroge l'API `theses.fr` de façon paginée, génère trois formats d'export simultanés (`.csv` 213 colonnes, `.json`, `.jsonl`), compresse le `.jsonl` en `.jsonl.gz`, puis téléverse ces quatre fichiers vers data.gouv.fr (en morceaux de `DATA_GOUV_UPLOAD_CHUNK_SIZE` pour les gros fichiers).
+Interroge l'API `theses.fr` de façon paginée, écrit le `.json` et le `.jsonl`, génère le `.csv` en aplatissant le `.jsonl`, compresse le `.jsonl` en `.jsonl.gz`, puis téléverse ces quatre fichiers vers data.gouv.fr (en morceaux de `DATA_GOUV_UPLOAD_CHUNK_SIZE` pour les gros fichiers).
 
-- **CSV au format historique :** nombre de colonnes fixe. Les valeurs qui n'y tiennent pas (auteurs au-delà du premier, cotutelles, membres du jury au-delà de 12, etc.) ne figurent que dans le JSON et le JSONL ; elles sont décomptées dans `{horodatage}_datagouv_troncatures.txt`, écrit à côté des exports.
+- **CSV = JSON aplati :** un attribut d'objet devient la colonne `objet.attribut`, un élément de tableau la colonne `tableau.index` (ex : `directeurs_these.0.nom`, `titres.fr`). Les colonnes sont l'ensemble des chemins rencontrés dans l'export, triés par ordre lexicographique comme dans le format historique : aucune valeur n'est perdue, et le nombre de colonnes dépend des données de l'export.
 
 - **Règle des 6 mois :** Le batch ne s'exécute que si la dernière publication réussie sur data.gouv.fr date de plus de 6 mois. Les exports en mode test ou sans téléversement (`DATA_GOUV_UPLOAD_ENABLED=false`) ne comptent pas.
 - **Forçage manuel :** `FORCE_RUN=true` permet de contourner la règle des 6 mois.

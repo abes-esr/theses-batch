@@ -37,7 +37,7 @@ class DatagouvThesisProcessorTest {
         Thesis thesis = thesis("""
                 {"id": "s12345", "nnt": "2023ABCD0001", "doi": "10.1234/test", "numSujet": "12345",
                  "titrePrincipal": "Titre principal",
-                 "titres": {"en": "Title in English", "fr": "Titre en français avec saut", "es": "Título", "de": "Titel"},
+                 "titres": {"en": "Title in English", "fr": "Titre en français\u2028avec saut", "es": "Título", "de": "Titel"},
                  "auteurs": [{"nom": "Dupont", "prenom": "Jean", "ppn": "111111111"},
                              {"nom": "Martin", "prenom": "Julie", "ppn": "121212121"}],
                  "directeurs": [{"nom": "Durand", "prenom": "Marie", "ppn": "222222222"}],
@@ -57,7 +57,7 @@ class DatagouvThesisProcessorTest {
                    "en": [{"keyword": "Polymers", "type": "sujet"}],
                    "es": [{"keyword": "Polímeros", "type": "sujet"}]},
                  "langues": ["fr", "en"], "source": "theses.fr", "status": "soutenue", "accessible": "oui",
-                 "cas": "cas-1", "dateCines": "20/06/2023", "numSujetSansS": "12345S", "oaiSetNames": ["ddc:540"],
+                 "cas": "cas-1", "dateCines": "20/06/2023", "dateFinEmbargo": "01/01/2027", "theseTravaux": "oui", "numSujetSansS": "12345S", "oaiSetNames": ["ddc:540"],
                  "resumes": {"fr": " Énergie $E = \\\\alpha$ ","en": "Abstract in English", "de": "Zusammenfassung auf Deutsch"}}
                 """);
 
@@ -68,6 +68,9 @@ class DatagouvThesisProcessorTest {
         assertThat(export.status()).isEqualTo("soutenue");
         assertThat(export.date_soutenance()).isEqualTo("2023-06-15");
         assertThat(export.date_cines()).isEqualTo("2023-06-20");
+        // Valeurs fournies par l'API, la date au même format que les autres
+        assertThat(export.embargo()).isEqualTo("2027-01-01");
+        assertThat(export.these_sur_travaux()).isEqualTo("oui");
         assertThat(export.nnt()).isEqualTo("2023ABCD0001");
         assertThat(export.num_sujet_sans_s()).isEqualTo("12345S");
 
@@ -109,11 +112,14 @@ class DatagouvThesisProcessorTest {
     }
 
     @Test
-    void process_avecChampsNullsEtValeursParDefaut() {
+    void process_avecChampsNulls_nInventeAucuneValeur() {
         ExportThesis export = processor.process(thesis("{\"id\": \"s999\"}"));
 
-        assertThat(export.accessible()).isEqualTo("non");
-        assertThat(export.source()).isEqualTo("theses.fr");
+        assertThat(export.accessible()).isNull();
+        assertThat(export.source()).isNull();
+        assertThat(export.oai_set_specs()).isNull();
+        assertThat(export.embargo()).isNull();
+        assertThat(export.these_sur_travaux()).isNull();
         assertThat(export.status()).isEqualTo("en cours");
         assertThat(export.nnt()).isEqualTo("s999");
         assertThat(export.auteur()).isNull();
@@ -129,10 +135,19 @@ class DatagouvThesisProcessorTest {
     }
 
     @Test
-    void process_oaiFallbackSurChimie() {
+    void process_chimieSansOaiSetNames_nAjouteAucunCode() {
         ExportThesis export = processor.process(thesis("{\"id\": \"s100\", \"discipline\": \"chimie\"}"));
 
-        assertThat(export.oai_set_specs()).containsExactly("ddc:540");
+        assertThat(export.oai_set_specs()).isNull();
+    }
+
+    @Test
+    void process_oaiSetNames_reprisTelsQuels() {
+        ExportThesis export = processor.process(thesis("""
+                {"id": "s102", "oaiSetNames": [" Géographie et histoire", "Chimie, minéralogie, cristallographie"]}
+                """));
+
+        assertThat(export.oai_set_specs()).containsExactly(" Géographie et histoire", "Chimie, minéralogie, cristallographie");
     }
 
     @Test

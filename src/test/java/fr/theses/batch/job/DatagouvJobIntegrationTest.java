@@ -156,9 +156,14 @@ class DatagouvJobIntegrationTest {
         assertThat(execution.getStepExecutions()).extracting(StepExecution::getStepName)
                 .containsExactly("fetchAndWriteStep", "csvStep", "gzipStep", "uploadStep");
 
-        List<String> csv = Files.readAllLines(outputDir.resolve(RUN + "_datagouv_results.csv"));
+        // Run réussi sans téléversement : rangé dans datagouv/test, jamais dans success ; tmp est vidé
+        Path exports = outputDir.resolve("datagouv").resolve("test");
+        assertThat(outputDir.resolve("datagouv").resolve("tmp")).isEmptyDirectory();
+        assertThat(outputDir.resolve("datagouv").resolve("success")).doesNotExist();
+
+        List<String> csv = Files.readAllLines(exports.resolve(RUN + "_datagouv_results.csv"));
         assertThat(csv).hasSize(3);
-        assertThat(csv.getFirst()).startsWith("﻿\"accessible\",\"auteur.idref\"");
+        assertThat(csv.getFirst()).startsWith("\uFEFF\"accessible\",\"auteur.idref\"");
         assertThat(csv.get(2)).contains("\"Titre deux, avec virgule\"");
         // CSV = JSONL aplati : toutes les valeurs y figurent, y compris celles sans colonne dans l'ancien format
         List<CSVRecord> records = CSVFormat.DEFAULT.builder().setHeader().setSkipHeaderRecord(true).build()
@@ -174,16 +179,16 @@ class DatagouvJobIntegrationTest {
         assertThat(first.get("date_soutenance")).isEqualTo("2023-06-15");
         assertThat(records.get(1).get("auteurs.1.nom")).isEmpty();
 
-        List<String> jsonl = Files.readAllLines(outputDir.resolve(RUN + "_datagouv_results.jsonl"));
+        List<String> jsonl = Files.readAllLines(exports.resolve(RUN + "_datagouv_results.jsonl"));
         assertThat(jsonl).hasSize(2);
         assertThat(jsonl.getFirst()).contains("\"nnt\":\"2023MONT0001\"", "\"nom\":\"ED 60\"",
                 "\"nom\":\"Durand\"", "\"etablissements_cotutelle\":[{\"nom\":\"Université Laval\"",
                 "\"titres\":{\"fr\":\"Titre un\",\"en\":\"Title one\",\"es\":\"Título uno\"}");
         // Sans NNT, l'identifiant de la thèse le remplace
         assertThat(jsonl.get(1)).contains("\"nnt\":\"s2\"");
-        assertThat(outputDir.resolve(RUN + "_datagouv_results.jsonl.gz")).isNotEmptyFile();
+        assertThat(exports.resolve(RUN + "_datagouv_results.jsonl.gz")).isNotEmptyFile();
 
-        String json = Files.readString(outputDir.resolve(RUN + "_datagouv_results.json"));
+        String json = Files.readString(exports.resolve(RUN + "_datagouv_results.json"));
         assertThat(json.strip()).startsWith("[").endsWith("]");
         assertThat(json).contains("\"Résumé un\"", "\"Titre deux, avec virgule\"");
         // Même sérialisation : chaque élément du JSON est identique à la ligne JSONL correspondante

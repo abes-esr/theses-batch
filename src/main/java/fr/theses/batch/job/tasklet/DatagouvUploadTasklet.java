@@ -34,6 +34,11 @@ import java.util.UUID;
  * <p>
  * Si le mode test ou upload-enabled=false est configuré, l'upload est ignoré : un export
  * de test (limité à 50 thèses) ne doit jamais remplacer les ressources publiées.
+ * <p>
+ * Les 4 ressources sont remplacées l'une après l'autre, sans nouvelle tentative : un échec en cours
+ * de route laisse les ressources déjà envoyées à jour et les suivantes à leur version précédente, et
+ * le log d'erreur indique lesquelles ont été publiées. Le job se termine alors en échec, ce qui ne
+ * compte pas comme une publication : le cron suivant relance l'export complet et les 4 envois.
  */
 @Slf4j
 public class DatagouvUploadTasklet implements Tasklet {
@@ -80,7 +85,7 @@ public class DatagouvUploadTasklet implements Tasklet {
         }
         this.restClient = restClient;
         // Sans « / » final : UPLOAD_PATH commence déjà par « / »
-        this.baseUrl = baseUrl == null ? null : baseUrl.replaceAll("/+$", "");
+        this.baseUrl = baseUrl == null ? null : stripTrailingSlashes(baseUrl);
         this.datasetId = datasetId;
         this.csvResourceId = csvResourceId;
         this.jsonResourceId = jsonResourceId;
@@ -92,6 +97,14 @@ public class DatagouvUploadTasklet implements Tasklet {
         this.modeTest = modeTest;
         this.runTimestamp = runTimestamp;
         this.chunkSize = chunkSize;
+    }
+
+    private static String stripTrailingSlashes(String url) {
+        int end = url.length();
+        while (end > 0 && url.charAt(end - 1) == '/') {
+            end--;
+        }
+        return url.substring(0, end);
     }
 
     /**
@@ -108,25 +121,43 @@ public class DatagouvUploadTasklet implements Tasklet {
     public RepeatStatus execute(@NonNull StepContribution contribution, @NonNull ChunkContext chunkContext) throws IOException {
         if (modeTest) {
             log.info("Mode test actif : téléversement vers data.gouv.fr ignoré, quelle que soit la valeur de app.datagouv.upload-enabled.");
-            log.info("Les 4 fichiers d'export ont été déposés et restent disponibles dans le dossier : {}",
-                    new File(outputDir).getAbsolutePath());
+            log.info("Les 4 fichiers d'export sont conservés localement (rangés en fin de job dans datagouv/test).");
             return RepeatStatus.FINISHED;
         }
         if (!uploadEnabled) {
             log.info("Téléversement vers data.gouv.fr désactivé (app.datagouv.upload-enabled = false).");
-            log.info("Les 4 fichiers d'export ont été déposés et restent disponibles dans le dossier : {}",
-                    new File(outputDir).getAbsolutePath());
+            log.info("Les 4 fichiers d'export sont conservés localement (rangés en fin de job dans datagouv/test).");
             return RepeatStatus.FINISHED;
         }
 
-        // Tout est vérifié avant le premier envoi : jamais de publication partielle sur data.gouv.fr
+        // Configuration et fichiers vérifiés avant le premier envoi : rien n'est envoyé si l'un d'eux manque
         checkReadyToUpload();
         log.info("Début du téléversement des exports vers data.gouv.fr...");
 
-        uploadFile("CSV", csvResourceId, runTimestamp + "_datagouv_results.csv", "theses-soutenues.csv");
-        uploadFile("JSON", jsonResourceId, runTimestamp + "_datagouv_results.json", "theses-soutenues.json");
-        uploadFile("JSONL", jsonlResourceId, runTimestamp + "_datagouv_results.jsonl", "theses-soutenues.jsonl");
-        uploadFile("JSONL.gz", jsonlGzResourceId, runTimestamp + "_datagouv_results.jsonl.gz", "theses-soutenues.jsonl.gz");
+        // Format -> identifiant de ressource, dans l'ordre d'envoi
+        Map<String, String> resources = new LinkedHashMap<>();
+        resources.put("csv", csvResourceId);
+        resources.put("json", jsonResourceId);
+        resources.put("jsonl", jsonlResourceId);
+        resources.put("jsonl.gz", jsonlGzResourceId);
+
+        List<String> published = new ArrayList<>();
+        for (Map.Entry<String, String> resource : resources.entrySet()) {
+            String extension = resource.getKey();
+            try {
+                uploadFile(extension.toUpperCase(), resource.getValue(), runTimestamp + "_datagouv_results." + extension,
+                        "theses-soutenues." + extension);
+            } catch (RuntimeException | IOException e) {
+                List<String> notPublished = new ArrayList<>(resources.keySet());
+                notPublished.removeAll(published);
+                log.error("Échec du téléversement du fichier {} : publication partielle sur data.gouv.fr. "
+                                + "Ressources mises à jour : {} ; ressources restées à leur version précédente : {}. "
+                                + "Le prochain lancement refera l'export et les 4 envois.",
+                        extension, published.isEmpty() ? "aucune" : published, notPublished);
+                throw e;
+            }
+            published.add(extension);
+        }
 
         log.info("Tous les fichiers ont été téléversés avec succès sur data.gouv.fr.");
         return RepeatStatus.FINISHED;

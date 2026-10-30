@@ -12,8 +12,8 @@ env | sed 's/^\([^=]*\)=\(.*\)$/\1="\2"/' > /etc/environment
 echo "LANG=fr_FR.UTF-8" >> /etc/environment
 echo "LC_ALL=fr_FR.UTF-8" >> /etc/environment
 
-# 2. Si une commande spécifique est transmise au conteneur
-if [ $# -gt 0 ] && [ "$1" != "tail" ]; then
+# 2. Si une commande est transmise au conteneur (docker run, ou "command" du compose), elle remplace le maintien actif
+if [ $# -gt 0 ]; then
     exec "$@"
 fi
 

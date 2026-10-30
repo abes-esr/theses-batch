@@ -3,6 +3,7 @@ package fr.theses.batch.job.configuration;
 import fr.theses.batch.business.datagouv.model.ExportThesis;
 import fr.theses.batch.business.datagouv.model.Thesis;
 import fr.theses.batch.job.RunTimestamp;
+import fr.theses.batch.job.listener.DatagouvOutputListener;
 import fr.theses.batch.job.processor.DatagouvThesisProcessor;
 import fr.theses.batch.job.reader.DatagouvThesesItemReader;
 import fr.theses.batch.job.tasklet.DatagouvCsvTasklet;
@@ -72,11 +73,18 @@ public class DatagouvBatchConfiguration {
      * Le corps est mis en tampon afin d'envoyer un en-tête Content-Length : sans lui, la requête
      * part en streaming (chunked) et data.gouv.fr ne reçoit pas le paramètre "file".
      * DatagouvUploadTasklet découpe les gros fichiers : le tampon ne dépasse pas la taille d'un morceau.
+     * Timeouts obligatoires : sans eux, un serveur muet bloquerait le batch et son verrou indéfiniment,
+     * et les crons suivants ne pourraient plus retenter la publication.
      */
     @Bean
-    public RestClient dataGouvRestClient() {
+    public RestClient dataGouvRestClient(
+            @Value("${app.datagouv.connect-timeout:30s}") Duration connectTimeout,
+            @Value("${app.datagouv.read-timeout:5m}") Duration readTimeout) {
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(connectTimeout);
+        requestFactory.setReadTimeout(readTimeout);
         return RestClient.builder()
-                .requestFactory(new BufferingClientHttpRequestFactory(new SimpleClientHttpRequestFactory()))
+                .requestFactory(new BufferingClientHttpRequestFactory(requestFactory))
                 .build();
     }
 
@@ -87,7 +95,7 @@ public class DatagouvBatchConfiguration {
     public DatagouvThesesItemReader thesesReader(
             RestClient thesesRestClient,
             @Value("${app.theses.page-size:1000}") int pageSize,
-            @Value("${app.datagouv.mode-test:${app.mode-test:${MODE_TEST:false}}}") boolean modeTest) {
+            @Value("${app.datagouv.mode-test:false}") boolean modeTest) {
         return new DatagouvThesesItemReader(thesesRestClient, pageSize, modeTest);
     }
 
@@ -110,7 +118,7 @@ public class DatagouvBatchConfiguration {
             JsonMapper jsonMapper) {
         return new FlatFileItemWriterBuilder<ExportThesis>()
                 .name("datagouvJsonlWriter")
-                .resource(new FileSystemResource(new File(outputDir, runTimestamp.value() + "_datagouv_results.jsonl")))
+                .resource(new FileSystemResource(new File(DatagouvOutputListener.tmpDir(outputDir), runTimestamp.value() + "_datagouv_results.jsonl")))
                 .encoding("UTF-8")
                 .lineAggregator(new DatagouvJsonlLineAggregator(jsonMapper))
                 .build();
@@ -128,7 +136,7 @@ public class DatagouvBatchConfiguration {
             JsonMapper jsonMapper) {
         return new JsonFileItemWriterBuilder<ExportThesis>()
                 .name("datagouvJsonWriter")
-                .resource(new FileSystemResource(new File(outputDir, runTimestamp.value() + "_datagouv_results.json")))
+                .resource(new FileSystemResource(new File(DatagouvOutputListener.tmpDir(outputDir), runTimestamp.value() + "_datagouv_results.json")))
                 .jsonObjectMarshaller(new JacksonJsonObjectMarshaller<>(jsonMapper))
                 .build();
     }
@@ -157,9 +165,10 @@ public class DatagouvBatchConfiguration {
                                   DatagouvThesisProcessor thesisProcessor,
                                   @Qualifier("datagouvCompositeWriter") CompositeItemWriter<ExportThesis> datagouvCompositeWriter,
                                   @Qualifier("datagouvJsonlWriter") FlatFileItemWriter<ExportThesis> datagouvJsonlWriter,
-                                  @Qualifier("datagouvJsonWriter") JsonFileItemWriter<ExportThesis> datagouvJsonWriter) {
+                                  @Qualifier("datagouvJsonWriter") JsonFileItemWriter<ExportThesis> datagouvJsonWriter,
+                                  @Value("${app.datagouv.chunk-size:100}") int chunkSize) {
         return new StepBuilder("fetchAndWriteStep", jobRepository)
-                .<Thesis, ExportThesis>chunk(100)
+                .<Thesis, ExportThesis>chunk(chunkSize)
                 .transactionManager(transactionManager)
                 .reader(thesesReader)
                 .processor(thesisProcessor)
@@ -178,7 +187,7 @@ public class DatagouvBatchConfiguration {
             @Value("${app.output-dir:output}") String outputDir,
             RunTimestamp runTimestamp,
             JsonMapper jsonMapper) {
-        return new DatagouvCsvTasklet(outputDir, runTimestamp.value(), jsonMapper);
+        return new DatagouvCsvTasklet(DatagouvOutputListener.tmpDir(outputDir).getPath(), runTimestamp.value(), jsonMapper);
     }
 
     /**
@@ -201,7 +210,7 @@ public class DatagouvBatchConfiguration {
     public DatagouvGzipTasklet gzipTasklet(
             @Value("${app.output-dir:output}") String outputDir,
             RunTimestamp runTimestamp) {
-        return new DatagouvGzipTasklet(outputDir, runTimestamp.value());
+        return new DatagouvGzipTasklet(DatagouvOutputListener.tmpDir(outputDir).getPath(), runTimestamp.value());
     }
 
     /**
@@ -232,11 +241,11 @@ public class DatagouvBatchConfiguration {
             @Value("${app.datagouv.api-key:}") String apiKey,
             @Value("${app.output-dir:output}") String outputDir,
             @Value("${app.datagouv.upload-enabled:false}") boolean uploadEnabled,
-            @Value("${app.datagouv.mode-test:${app.mode-test:${MODE_TEST:false}}}") boolean modeTest,
+            @Value("${app.datagouv.mode-test:false}") boolean modeTest,
             @Value("${app.datagouv.upload-chunk-size:10MB}") DataSize uploadChunkSize,
             RunTimestamp runTimestamp) {
         return new DatagouvUploadTasklet(dataGouvRestClient, baseUrl, datasetId, csvResourceId, jsonResourceId,
-                jsonlResourceId, jsonlGzResourceId, apiKey, outputDir, uploadEnabled, modeTest, runTimestamp.value(),
+                jsonlResourceId, jsonlGzResourceId, apiKey, DatagouvOutputListener.tmpDir(outputDir).getPath(), uploadEnabled, modeTest, runTimestamp.value(),
                 Math.toIntExact(uploadChunkSize.toBytes()));
     }
 
@@ -253,6 +262,19 @@ public class DatagouvBatchConfiguration {
     }
 
     /**
+     * Listener rangeant les fichiers du run dans datagouv/success, test ou errors en fin de job.
+     */
+    @Bean
+    public DatagouvOutputListener datagouvOutputListener(
+            @Value("${app.output-dir:output}") String outputDir,
+            RunTimestamp runTimestamp,
+            @Value("${app.datagouv.log-retention:30d}") Duration logRetention,
+            @Value("${app.datagouv.upload-enabled:false}") boolean uploadEnabled,
+            @Value("${app.datagouv.mode-test:false}") boolean modeTest) {
+        return new DatagouvOutputListener(outputDir, runTimestamp.value(), logRetention, uploadEnabled && !modeTest);
+    }
+
+    /**
      * Définition du Job Spring Batch thesesDumpDataGouvJob enchaînant la génération et l'envoi.
      */
     @Bean
@@ -260,9 +282,11 @@ public class DatagouvBatchConfiguration {
                                      @Qualifier("fetchAndWriteStep") Step fetchAndWriteStep,
                                      @Qualifier("csvStep") Step csvStep,
                                      @Qualifier("gzipStep") Step gzipStep,
-                                     @Qualifier("uploadStep") Step uploadStep) {
+                                     @Qualifier("uploadStep") Step uploadStep,
+                                     DatagouvOutputListener datagouvOutputListener) {
         return new JobBuilder("thesesDumpDataGouvJob", jobRepository)
                 .incrementer(new RunIdIncrementer())
+                .listener(datagouvOutputListener)
                 .start(fetchAndWriteStep)
                 .next(csvStep)
                 .next(gzipStep)

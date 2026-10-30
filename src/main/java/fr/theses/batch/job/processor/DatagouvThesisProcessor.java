@@ -33,9 +33,7 @@ public class DatagouvThesisProcessor implements ItemProcessor<Thesis, ExportThes
      */
     @Override
     public ExportThesis process(@NonNull Thesis t) {
-        // 1. Valeurs par défaut simples et harmonisées
-        String cleanSource = t.source() != null ? t.source() : "theses.fr";
-        String cleanAccessible = t.accessible() != null ? t.accessible() : "non";
+        // 1. Statut harmonisé ; source et accessible sont repris tels quels (absents si l'API ne les renvoie pas)
         String cleanStatus = "soutenue".equalsIgnoreCase(t.status()) ? "soutenue" : "en cours";
 
         // 2. Auteurs : liste complète, et premier auteur seul pour le format historique
@@ -61,16 +59,12 @@ public class DatagouvThesisProcessor implements ItemProcessor<Thesis, ExportThes
         List<String> rameaux = new ArrayList<>();
         ExportSujets sujets = buildSujets(t.mapSujets(), rameaux);
 
-        // 7. OAI Set Specs (on utilise en priorité oaiSetNames retourné par l'API, sinon repli sur l'ancienne déduction)
+        // 7. OAI Set Specs : libellés renvoyés par l'API, repris tels quels
         List<String> oaiSpecs = t.oaiSetNames();
-        if ((oaiSpecs == null || oaiSpecs.isEmpty())
-                && t.discipline() != null && "chimie".equalsIgnoreCase(t.discipline().trim())) {
-            oaiSpecs = List.of("ddc:540");
-        }
 
         // Retourne le DTO d'export complété
         return new ExportThesis(
-                cleanAccessible,
+                t.accessible(),
                 auteur,
                 auteurs,
                 t.cas(),
@@ -79,7 +73,7 @@ public class DatagouvThesisProcessor implements ItemProcessor<Thesis, ExportThes
                 persons(t.directeurs()),
                 t.discipline(),
                 organizations(t.ecolesDoctorales(), false),
-                null, // embargo
+                reformatDate(t.dateFinEmbargo()),
                 organizations(t.etabCotutelle(), false),
                 etabs,
                 langues,
@@ -90,11 +84,11 @@ public class DatagouvThesisProcessor implements ItemProcessor<Thesis, ExportThes
                 president,
                 persons(t.rapporteurs()),
                 buildResumes(t.resumes()),
-                cleanSource,
+                t.source(),
                 cleanStatus,
                 sujets,
                 rameaux.isEmpty() ? null : rameaux,
-                "non", // these_sur_travaux
+                t.theseTravaux(),
                 buildTitres(t),
                 reformatDate(t.dateCines()),
                 t.numSujetSansS()
@@ -224,7 +218,7 @@ public class DatagouvThesisProcessor implements ItemProcessor<Thesis, ExportThes
     }
 
     /**
-     * Nettoie le texte en remplaçant les séparateurs de ligne Unicode inhabituels (LS   et PS  )
+     * Nettoie le texte en remplaçant les séparateurs de ligne Unicode inhabituels (LS U+2028 et PS U+2029)
      * par des sauts de ligne ordinaires, et en rognant les espaces. Les antislashs sont conservés
      * (LaTeX des résumés, notations) : les writers JSON et CSV les échappent eux-mêmes.
      *
@@ -235,6 +229,6 @@ public class DatagouvThesisProcessor implements ItemProcessor<Thesis, ExportThes
         if (text == null) {
             return null;
         }
-        return text.replace(" ", "\n").replace(" ", "\n").trim();
+        return text.replace("\u2028", "\n").replace("\u2029", "\n").trim();
     }
 }

@@ -41,7 +41,7 @@ class DatagouvCsvTaskletTest {
         String[] lines = csv.split("\n");
         assertThat(lines).hasSize(3);
         // BOM, en-tête entre guillemets, colonnes dans l'ordre lexicographique (0, 10, 1, 2...)
-        assertThat(lines[0]).isEqualTo("﻿\"membres_jury.0.nom\",\"membres_jury.1.nom\",\"membres_jury.10.nom\","
+        assertThat(lines[0]).isEqualTo("\uFEFF\"membres_jury.0.nom\",\"membres_jury.1.nom\",\"membres_jury.10.nom\","
                 + "\"membres_jury.2.nom\",\"membres_jury.3.nom\",\"membres_jury.4.nom\",\"membres_jury.5.nom\","
                 + "\"membres_jury.6.nom\",\"membres_jury.7.nom\",\"membres_jury.8.nom\",\"membres_jury.9.nom\","
                 + "\"nnt\",\"titres.fr\"");

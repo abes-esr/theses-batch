@@ -91,10 +91,10 @@ class ThesesBatchRunnerTest {
     }
 
     @Test
-    void run_avecArgumentDump_lanceDatagouv() throws Exception {
-        runner.run("DUMP");
+    void run_ancienAliasDump_neLancePlusDatagouv() throws Exception {
+        runner.run("dump");
 
-        verify(datagouvJobLauncherService).checkAndRunJob();
+        verify(datagouvJobLauncherService, never()).checkAndRunJob();
     }
 
     @Test

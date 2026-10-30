@@ -142,6 +142,22 @@ class DatagouvUploadTaskletTest {
     }
 
     @Test
+    void execute_echecApresUnePremiereRessource_signaleLaPublicationPartielle() throws IOException {
+        createExports();
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        expectUpload(server, "csvId", "theses-soutenues.csv", "csv;content");
+        server.expect(requestTo(BASE_URL + "jsonId/upload/")).andRespond(withBadRequest());
+
+        DatagouvUploadTasklet tasklet = tasklet(builder.build(), true);
+
+        // Le CSV est parti, le JSON est refusé : l'erreur est propagée et rien n'est envoyé ensuite
+        assertThatThrownBy(() -> tasklet.execute(mock(StepContribution.class), mock(ChunkContext.class)))
+                .isInstanceOf(HttpClientErrorException.BadRequest.class);
+        server.verify();
+    }
+
+    @Test
     void execute_fichierPlusGrosQueUnMorceau_televerseEnMorceauxPuisAssemble() throws IOException {
         createExports();
         // 25 octets avec des morceaux de 10 : 3 morceaux (10, 10, 5) puis la requête d'assemblage

@@ -1,6 +1,7 @@
 package fr.theses.batch.job.scheduler;
 
 import fr.theses.batch.job.RunTimestamp;
+import fr.theses.batch.job.listener.DatagouvOutputListener;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -43,7 +44,8 @@ class DatagouvJobLauncherServiceTest {
         job = mock(Job.class);
         when(job.getName()).thenReturn(JOB_NAME);
         jobRepository = mock(JobRepository.class);
-        service = new DatagouvJobLauncherService(jobOperator, job, jobRepository, new RunTimestamp("2026-01-02-03-04-05"));
+        service = new DatagouvJobLauncherService(jobOperator, job, jobRepository, new RunTimestamp("2026-01-02-03-04-05"),
+                mock(DatagouvOutputListener.class));
         ReflectionTestUtils.setField(service, "thesesApiBaseUrl", "http://theses.test/api/v1/batch");
     }
 
@@ -82,19 +84,6 @@ class DatagouvJobLauncherServiceTest {
     }
 
     @Test
-    void checkAndRunJob_runTimeFourni_utiliseCetteValeur() throws Exception {
-        ReflectionTestUtils.setField(service, "forceRun", true);
-        ReflectionTestUtils.setField(service, "cmdRunTime", 42L);
-        jobTermineAvec(BatchStatus.COMPLETED);
-
-        service.checkAndRunJob();
-
-        ArgumentCaptor<JobParameters> params = ArgumentCaptor.forClass(JobParameters.class);
-        verify(jobOperator).start(eq(job), params.capture());
-        assertThat(params.getValue().getLong("runTime")).isEqualTo(42L);
-    }
-
-    @Test
     void checkAndRunJob_erreurAuLancement_propageLException() throws Exception {
         ReflectionTestUtils.setField(service, "modeTest", true);
         when(jobOperator.start(any(Job.class), any(JobParameters.class))).thenThrow(new IllegalStateException("boom"));
@@ -121,7 +110,7 @@ class DatagouvJobLauncherServiceTest {
         when(execution.getEndTime()).thenReturn(LocalDateTime.now().minusDays(1));
         when(execution.getJobParameters()).thenReturn(new JobParameters());
         when(jobRepository.getJobInstanceCount(JOB_NAME)).thenReturn(1L);
-        when(jobRepository.getJobInstances(JOB_NAME, 0, 20)).thenReturn(List.of(instance));
+        when(jobRepository.getJobInstances(JOB_NAME, 0, DatagouvJobRunDecider.PAGE_SIZE)).thenReturn(List.of(instance));
         when(jobRepository.getJobExecutions(instance)).thenReturn(List.of(execution));
 
         assertThat(service.checkAndRunJob()).isFalse();

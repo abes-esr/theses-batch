@@ -32,13 +32,14 @@ import java.util.function.Consumer;
  * les colonnes, la seconde écrit une ligne par thèse. Aucune valeur n'est perdue et la mémoire
  * utilisée ne dépend que du nombre de colonnes, pas du nombre de thèses.
  * <p>
- * Les colonnes sont triées par ordre lexicographique (membres_jury.0, membres_jury.10, membres_jury.1...),
- * comme dans le format historique du jeu de données.
+ * Les colonnes sont triées par ordre lexicographique (membres_jury.0, membres_jury.1, membres_jury.10...).
+ * Leur nombre et leur liste dépendent des données exportées : ils peuvent varier d'une publication
+ * à l'autre et ne correspondent pas aux 213 colonnes fixes de l'ancien CSV.
  */
 @Slf4j
 public class DatagouvCsvTasklet implements Tasklet {
 
-    // En-tête entièrement entre guillemets comme le format historique, lignes avec guillemets si nécessaire
+    // En-tête entièrement entre guillemets comme l'ancien CSV, lignes avec guillemets si nécessaire
     private static final CSVFormat HEADER_FORMAT = CSVFormat.DEFAULT.builder()
             .setQuoteMode(QuoteMode.ALL)
             .setRecordSeparator("\n")
@@ -73,12 +74,12 @@ public class DatagouvCsvTasklet implements Tasklet {
         List<String> header = new ArrayList<>(columns);
 
         long rows;
-        try (Writer out = Files.newBufferedWriter(target.toPath(), StandardCharsets.UTF_8)) {
+        try (Writer out = Files.newBufferedWriter(target.toPath(), StandardCharsets.UTF_8);
+             CSVPrinter printer = new CSVPrinter(out, ROW_FORMAT)) {
             // BOM UTF-8 : Excel reconnaît ainsi l'encodage du fichier
-            out.write('﻿');
+            out.write('\uFEFF');
             out.write(HEADER_FORMAT.format(header.toArray()));
             out.write('\n');
-            CSVPrinter printer = new CSVPrinter(out, ROW_FORMAT);
             long[] count = {0};
             forEachThesis(values -> {
                 List<String> row = new ArrayList<>(header.size());
@@ -92,7 +93,6 @@ public class DatagouvCsvTasklet implements Tasklet {
                 }
                 count[0]++;
             });
-            printer.flush();
             rows = count[0];
         }
 

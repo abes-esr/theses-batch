@@ -63,6 +63,10 @@ RUN dnf install -y \
     && rm -rf /etc/cron.*/* \
     && dnf clean all
 
+# Dette connue : le conteneur et les batchs tournent en root. crond doit rester root ; passer les batchs
+# sous un utilisateur dédié demande un UID/GID configurable et des droits adaptés sur les volumes montés
+# (/output, /data, /input) côté serveurs.
+
 # Création des volumes et répertoires de données
 RUN mkdir -p /data /output /input
 

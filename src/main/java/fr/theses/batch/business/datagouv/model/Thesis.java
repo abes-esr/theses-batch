@@ -48,6 +48,10 @@ public record Thesis(
         String accessible,
         String cas,
         String dateCines,
+        // Date de fin d'embargo au format jj/mm/aaaa, absente sans embargo
+        String dateFinEmbargo,
+        // "oui" / "non"
+        String theseTravaux,
         String numSujetSansS,
         List<String> oaiSetNames,
         Map<String, String> resumes

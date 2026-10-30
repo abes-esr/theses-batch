@@ -21,8 +21,8 @@ echo "${THESES_BATCH_DATAGOUV_CRON} cd /scripts/ && /scripts/theses-batch-datago
 cat /etc/theses-batch.crontab
 crontab /etc/theses-batch.crontab
 
-# 3. Si une commande spécifique est transmise au conteneur
-if [ $# -gt 0 ] && [ "$1" != "crond" ]; then
+# 3. Si une commande est transmise au conteneur (docker run, ou "command" du compose), elle remplace crond
+if [ $# -gt 0 ]; then
     exec "$@"
 fi
 

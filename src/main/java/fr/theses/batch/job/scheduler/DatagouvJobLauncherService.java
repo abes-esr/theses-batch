@@ -1,6 +1,7 @@
 package fr.theses.batch.job.scheduler;
 
 import fr.theses.batch.job.RunTimestamp;
+import fr.theses.batch.job.listener.DatagouvOutputListener;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.batch.core.BatchStatus;
 import org.springframework.batch.core.job.Job;
@@ -25,18 +26,16 @@ public class DatagouvJobLauncherService {
     private final Job thesesDumpDataGouvJob;
     private final JobRepository jobRepository;
     private final RunTimestamp runTimestamp;
+    private final DatagouvOutputListener outputListener;
 
-    @Value("${app.datagouv.force-run:${app.force-run:${FORCE_RUN:false}}}")
+    @Value("${app.datagouv.force-run:false}")
     private boolean forceRun;
 
-    @Value("${app.datagouv.mode-test:${app.mode-test:${MODE_TEST:false}}}")
+    @Value("${app.datagouv.mode-test:false}")
     private boolean modeTest;
 
     @Value("${app.datagouv.upload-enabled:false}")
     private boolean uploadEnabled;
-
-    @Value("${app.datagouv.run-time:0}")
-    private long cmdRunTime;
 
     @Value("${app.theses.api-base-url:}")
     private String thesesApiBaseUrl;
@@ -48,15 +47,18 @@ public class DatagouvJobLauncherService {
      * @param thesesDumpDataGouvJob   Job Spring Batch Datagouv.
      * @param jobRepository            Explorateur de l'historique des jobs.
      * @param runTimestamp           Horodatage unique du run.
+     * @param outputListener         Rangement des fichiers du job et purge des anciens logs.
      */
     public DatagouvJobLauncherService(JobOperator jobOperator,
                                       @Qualifier("thesesDumpDataGouvJob") Job thesesDumpDataGouvJob,
                                       JobRepository jobRepository,
-                                      RunTimestamp runTimestamp) {
+                                      RunTimestamp runTimestamp,
+                                      DatagouvOutputListener outputListener) {
         this.jobOperator = jobOperator;
         this.thesesDumpDataGouvJob = thesesDumpDataGouvJob;
         this.jobRepository = jobRepository;
         this.runTimestamp = runTimestamp;
+        this.outputListener = outputListener;
     }
 
     /**
@@ -73,16 +75,16 @@ public class DatagouvJobLauncherService {
             throw new IllegalStateException("THESES_API_BASE_URL (app.theses.api-base-url) n'est pas définie : "
                     + "la tâche thesesDumpDataGouvJob ne peut pas démarrer.");
         }
+        // Chaque passage du cron crée un log, même quand le job est écarté : purge avant la décision
+        outputListener.purgeOldLogs();
         log.info("Vérification des conditions d'exécution de la tâche thesesDumpDataGouvJob...");
 
         DatagouvJobRunDecider decider = new DatagouvJobRunDecider(jobRepository, thesesDumpDataGouvJob.getName(), forceRun, modeTest);
 
         if (decider.shouldRun()) {
             log.info("Conditions réunies. Démarrage de la tâche thesesDumpDataGouvJob...");
-            long runTimeVal = (cmdRunTime > 0) ? cmdRunTime : System.currentTimeMillis();
-
             JobParameters params = new JobParametersBuilder()
-                    .addLong("runTime", runTimeVal)
+                    .addLong("runTime", System.currentTimeMillis())
                     .addString("runTimestamp", runTimestamp.value())
                     // Non identifiants : servent à DatagouvJobRunDecider pour ne compter que les vraies publications
                     .addString(DatagouvJobRunDecider.PARAM_MODE_TEST, String.valueOf(modeTest), false)

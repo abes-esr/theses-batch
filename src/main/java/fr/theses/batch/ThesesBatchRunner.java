@@ -57,7 +57,7 @@ public class ThesesBatchRunner implements CommandLineRunner {
 
         switch (jobToRun.toLowerCase()) {
             case "anr" -> runAnr();
-            case "datagouv", "dump" -> runDatagouv();
+            case "datagouv" -> runDatagouv();
             default -> {
                 log.error("Job inconnu : '{}'. Valeurs acceptées : 'anr', 'datagouv'.", jobToRun);
                 throw new IllegalArgumentException("Job inconnu : " + jobToRun);
@@ -66,14 +66,14 @@ public class ThesesBatchRunner implements CommandLineRunner {
     }
 
     /**
-     * Détermine quel batch exécuter : un argument seul (anr, datagouv, dump), sinon la propriété batch.job.
+     * Détermine quel batch exécuter : un argument seul (anr, datagouv), sinon la propriété batch.job.
      *
      * @param args Arguments CLI.
      * @return Nom du job, ou null si non spécifié.
      */
     private String resolveJobToRun(String[] args) {
         for (String arg : args) {
-            if ("anr".equalsIgnoreCase(arg) || "datagouv".equalsIgnoreCase(arg) || "dump".equalsIgnoreCase(arg)) {
+            if ("anr".equalsIgnoreCase(arg) || "datagouv".equalsIgnoreCase(arg)) {
                 return arg;
             }
         }

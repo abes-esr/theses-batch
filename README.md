@@ -7,7 +7,7 @@ Un ensemble unifié d'utilitaires batch relatifs aux thèses pour l'Abes.
 | Identifiant CLI        | Nom du job Spring Batch | Description                                                                                      |
 | ---------------------- | ----------------------- | ------------------------------------------------------------------------------------------------ |
 | `anr`                  | `anrJob`                | Extraction de mentions de financement ANR dans les fichiers PDF de thèses                        |
-| `datagouv` (ou `dump`) | `thesesDumpDataGouvJob` | Exportation complète des thèses soutenues (CSV, JSON, JSONL, JSONL.gz) et téléversement vers data.gouv.fr |
+| `datagouv`             | `thesesDumpDataGouvJob` | Exportation complète des thèses soutenues (CSV, JSON, JSONL, JSONL.gz) et téléversement vers data.gouv.fr |
 
 ---
 
@@ -53,7 +53,7 @@ Un échec du batch se termine par un code de sortie non nul et une erreur dans l
   ```
 - Lancer le batch **Datagouv** (mode test 50 thèses) :
   ```bash
-  mvn spring-boot:run -Dspring-boot.run.arguments="datagouv --app.mode-test=true"
+  mvn spring-boot:run -Dspring-boot.run.arguments="datagouv --app.datagouv.mode-test=true"
   ```
 - Compiler le JAR exécutable :
   ```bash
@@ -97,9 +97,19 @@ La variable d'environnement `THESES_BATCH_ANR_WRITERS_HEADER` permet d'extraire 
 
 Interroge l'API `theses.fr` de façon paginée, écrit le `.json` et le `.jsonl`, génère le `.csv` en aplatissant le `.jsonl`, compresse le `.jsonl` en `.jsonl.gz`, puis téléverse ces quatre fichiers vers data.gouv.fr (en morceaux de `DATA_GOUV_UPLOAD_CHUNK_SIZE` pour les gros fichiers).
 
-- **CSV = JSON aplati :** un attribut d'objet devient la colonne `objet.attribut`, un élément de tableau la colonne `tableau.index` (ex : `directeurs_these.0.nom`, `titres.fr`). Les colonnes sont l'ensemble des chemins rencontrés dans l'export, triés par ordre lexicographique comme dans le format historique : aucune valeur n'est perdue, et le nombre de colonnes dépend des données de l'export.
+- **CSV = JSON aplati :** un attribut d'objet devient la colonne `objet.attribut`, un élément de tableau la colonne `tableau.index` (ex : `directeurs_these.0.nom`, `titres.fr`). Les colonnes sont l'ensemble des chemins rencontrés dans l'export, triés par ordre lexicographique (`membres_jury.0`, `membres_jury.1`, `membres_jury.10`, `membres_jury.2`...) : aucune valeur n'est perdue.
+  - **Le jeu de colonnes n'est pas figé :** il dépend des données exportées (nombre maximal de membres du jury, de directeurs, langues des titres...). Il diffère de l'ancien CSV publié (213 colonnes fixes) et peut varier d'une publication à l'autre. Les colonnes doivent donc être lues par leur nom, pas par leur position. Le JSON et le JSONL, eux, ont une structure stable.
 
-- **Règle des 6 mois :** Le batch ne s'exécute que si la dernière publication réussie sur data.gouv.fr date de plus de 6 mois. Les exports en mode test ou sans téléversement (`DATA_GOUV_UPLOAD_ENABLED=false`) ne comptent pas.
-- **Forçage manuel :** `FORCE_RUN=true` permet de contourner la règle des 6 mois.
+- **Fichiers produits** (dans `OUTPUT_DIR/datagouv`) :
+  - `tmp/` : fichiers du run en cours d'écriture ;
+  - `success/` : uniquement les fichiers (et le log) de la dernière publication réussie sur data.gouv.fr ;
+  - `test/` : uniquement les fichiers du dernier run réussi sans publication (`MODE_TEST=true` ou `DATA_GOUV_UPLOAD_ENABLED=false`), pour ne jamais remplacer ceux de `success/` ;
+  - `errors/` : fichiers et logs de tous les runs en échec, vidé à chaque publication réussie. Les restes d'un run interrompu sans fin de job (conteneur arrêté, OOM) y sont déplacés au run suivant.
+  - Les logs de chaque passage du cron (`{timestamp}_batch.log`, à la racine de `OUTPUT_DIR`) sont supprimés au-delà de `THESES_BATCH_DATAGOUV_LOG_RETENTION` (30 jours par défaut).
+
+- **Règle des 6 mois :** Le batch ne s'exécute que si la dernière publication réussie sur data.gouv.fr date de plus de 6 mois. Tout l'historique est parcouru ; sans aucune publication réussie, le batch se lance. Les exports en mode test ou sans téléversement (`DATA_GOUV_UPLOAD_ENABLED=false`) ne comptent pas.
+  - **Conséquence :** avec `DATA_GOUV_UPLOAD_ENABLED=false`, aucune exécution ne compte comme publication : l'export complet est relancé à chaque passage du cron (tous les jours par défaut).
+  - **En cas d'échec** (API theses.fr, téléversement interrompu...), le run ne compte pas comme publication : le cron suivant relance l'export complet et les 4 envois.
+- **Forçage manuel :** `FORCE_RUN=true` permet de contourner la règle des 6 mois. Un avertissement est loggué à chaque run forcé : laissé dans l'environnement du conteneur, il relance l'export à chaque passage du cron. Pour un lancement ponctuel, préférer `--app.datagouv.force-run=true` en argument.
 - **Mode test :** `MODE_TEST=true` limite l'export à 50 thèses sans délai d'attente.
 - **Téléversement :** Activé avec `DATA_GOUV_UPLOAD_ENABLED=true`, l'URL `DATA_GOUV_BASE_URL` (`https://www.data.gouv.fr` en production, `https://demo.data.gouv.fr` pour tester) et les clés d'API configurées. Toujours ignoré en mode test (`MODE_TEST=true`).

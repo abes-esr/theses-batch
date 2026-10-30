@@ -26,6 +26,8 @@ public class DatagouvJobRunDecider {
     public static final String PARAM_MODE_TEST = "modeTest";
     /** Paramètre d'exécution : "false" si le téléversement vers data.gouv.fr était désactivé. */
     public static final String PARAM_UPLOAD_ENABLED = "uploadEnabled";
+    /** Nombre d'instances lues par requête lors du parcours de l'historique. */
+    static final int PAGE_SIZE = 100;
 
     private final JobRepository jobRepository;
     private final String jobName;
@@ -59,7 +61,9 @@ public class DatagouvJobRunDecider {
             return true;
         }
         if (forceRun) {
-            log.info("Forçage d'exécution actif (app.datagouv.force-run ou FORCE_RUN).");
+            // Un FORCE_RUN laissé dans l'environnement du conteneur republie à chaque passage du cron
+            log.warn("Forçage d'exécution actif (app.datagouv.force-run ou FORCE_RUN) : la règle des 6 mois est ignorée. "
+                    + "S'il est défini dans l'environnement du conteneur, chaque passage du cron relancera l'export.");
             return true;
         }
 
@@ -71,9 +75,8 @@ public class DatagouvJobRunDecider {
                 return true;
             }
 
-            // 3. Parcours des dernières instances à la recherche d'une exécution terminée avec succès
-            List<JobInstance> jobInstances = jobRepository.getJobInstances(jobName, 0, 20);
-            return checkPastExecutions(jobInstances);
+            // 3. Parcours de tout l'historique, du plus récent au plus ancien, jusqu'à la dernière publication
+            return checkPastExecutions();
         } catch (NoSuchJobException e) {
             log.info("Aucune exécution précédente (job non trouvé) détectée pour le job '{}'. Lancement requis.", jobName);
             return true;
@@ -81,23 +84,28 @@ public class DatagouvJobRunDecider {
     }
 
     /**
-     * Parcourt les instances de job fournies à la recherche de la dernière exécution réussie.
+     * Parcourt l'historique complet du job, page par page et de la plus récente à la plus ancienne
+     * instance, à la recherche de la dernière publication réussie.
      *
-     * @param jobInstances Liste des instances à inspecter.
      * @return true si le job doit être exécuté, false sinon.
      */
-    private boolean checkPastExecutions(List<JobInstance> jobInstances) {
-        for (JobInstance instance : jobInstances) {
-            List<JobExecution> executions = jobRepository.getJobExecutions(instance);
-            for (JobExecution execution : executions) {
-                Optional<Boolean> decision = checkExecutionStatus(execution);
-                if (decision.isPresent()) {
-                    return decision.get();
+    private boolean checkPastExecutions() {
+        for (int start = 0; ; start += PAGE_SIZE) {
+            List<JobInstance> jobInstances = jobRepository.getJobInstances(jobName, start, PAGE_SIZE);
+            for (JobInstance instance : jobInstances) {
+                for (JobExecution execution : jobRepository.getJobExecutions(instance)) {
+                    Optional<Boolean> decision = checkExecutionStatus(execution);
+                    if (decision.isPresent()) {
+                        return decision.get();
+                    }
                 }
             }
+            if (jobInstances.size() < PAGE_SIZE) {
+                break;
+            }
         }
-        // 4. Si aucune exécution précédente n'était COMPLETE (que des échecs ou abandons), on lance le Job.
-        log.info("Aucune exécution précédente n'a le statut COMPLETE. Lancement du Job pour régénération/initialisation.");
+        // 4. Aucune publication réussie dans tout l'historique (échecs, abandons, exports de test) : on lance le Job.
+        log.info("Aucune publication réussie dans l'historique du job '{}'. Lancement requis.", jobName);
         return true;
     }
 

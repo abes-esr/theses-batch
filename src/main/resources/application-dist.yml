@@ -80,6 +80,8 @@ app:
     json:
       pretty-print: ${THESES_BATCH_ANR_JSON_PRETTY_PRINT:true}
   datagouv:
+    # Nombre de thèses écrites par transaction dans les fichiers d'export
+    chunk-size: ${THESES_BATCH_DATAGOUV_CHUNK_SIZE:100}
     # URL de base de data.gouv.fr (https://www.data.gouv.fr en production, https://demo.data.gouv.fr pour tester)
     base-url: ${DATA_GOUV_BASE_URL:}
     api-key: ${DATA_GOUV_API_KEY:}
@@ -91,8 +93,16 @@ app:
     upload-enabled: ${DATA_GOUV_UPLOAD_ENABLED:false}
     # Les fichiers plus gros sont envoyés en plusieurs morceaux de cette taille (un seul morceau en mémoire à la fois).
     upload-chunk-size: ${DATA_GOUV_UPLOAD_CHUNK_SIZE:10MB}
+    # Timeouts du téléversement : un envoi bloqué fait échouer le run, retenté au cron suivant
+    connect-timeout: ${DATA_GOUV_CONNECT_TIMEOUT:30s}
+    # Temps maximal d'attente d'une réponse (envoi d'un morceau ou assemblage final)
+    read-timeout: ${DATA_GOUV_READ_TIMEOUT:5m}
+    # Âge au-delà duquel les logs des runs ({timestamp}_batch.log à la racine de output-dir) sont supprimés.
+    # Les exports sont rangés dans output-dir/datagouv : success (dernière publication), test (dernier run
+    # sans publication), errors (runs en échec, vidé à chaque publication réussie), tmp (run en cours).
+    log-retention: ${THESES_BATCH_DATAGOUV_LOG_RETENTION:30d}
     force-run: ${FORCE_RUN:false}
-    mode-test: ${MODE_TEST:${app.mode-test:false}}
+    mode-test: ${MODE_TEST:false}
   theses:
     api-base-url: ${THESES_API_BASE_URL:}
     page-size: ${THESES_PAGE_SIZE:1000}

@@ -14,8 +14,9 @@ import java.util.Set;
  * ItemReader paginé pour interroger l'API REST de theses.fr.
  * Récupère les thèses par lots successifs via RestClient.
  * <p>
- * L'ordre renvoyé par l'API n'est pas garanti stable d'une page à l'autre (ex aequo sur la date de
- * soutenance, réplicas Elasticsearch) : une thèse peut apparaître deux fois ou manquer. Les doublons
+ * L'endpoint batch de theses-api-recherche stabilise l'ordre d'une page à l'autre (même copie de l'index,
+ * date de soutenance départagée par idDoc). Par sécurité, si une thèse apparaît malgré tout deux fois ou
+ * manque (index modifié pendant l'export, ancienne version de l'API), le reader le détecte : les doublons
  * (même NNT, ou même identifiant à défaut) sont ignorés, et la lecture échoue s'il y a moins de thèses
  * distinctes que le totalHits annoncé par la première page. Les thèses ajoutées pendant l'export
  * (totalHits dépassé) sont acceptées.

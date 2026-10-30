@@ -20,6 +20,7 @@
     <properties>
         <java.version>21</java.version>
         <PDFBOX.version>3.0.8</PDFBOX.version>
+        <COMMONS-CSV.version>1.14.1</COMMONS-CSV.version>
         <jacoco.version>0.8.14</jacoco.version>
         <!-- Seuils de couverture vérifiés par jacoco:check (phase verify) -->
         <jacoco.line.minimum>0.80</jacoco.line.minimum>
@@ -72,7 +73,7 @@
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-csv</artifactId>
-            <version>1.10.0</version>
+            <version>${COMMONS-CSV.version}</version>
         </dependency>
 
         <!-- Lombok -->

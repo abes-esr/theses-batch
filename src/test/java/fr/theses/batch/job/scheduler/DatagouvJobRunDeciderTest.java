@@ -43,7 +43,7 @@ class DatagouvJobRunDeciderTest {
     }
 
     /**
-     * Historique : une instance par exécution, la plus récente en premier.
+     * Historique : une instance par exécution, la plus récente en premier, servi par pages de PAGE_SIZE.
      */
     private void history(JobExecution... executions) throws Exception {
         List<JobInstance> instances = new ArrayList<>();
@@ -53,7 +53,22 @@ class DatagouvJobRunDeciderTest {
             when(jobRepository.getJobExecutions(instance)).thenReturn(List.of(executions[i]));
         }
         when(jobRepository.getJobInstanceCount(jobName)).thenReturn((long) executions.length);
-        when(jobRepository.getJobInstances(jobName, 0, 20)).thenReturn(instances);
+        int pageSize = DatagouvJobRunDecider.PAGE_SIZE;
+        for (int start = 0; start <= instances.size(); start += pageSize) {
+            when(jobRepository.getJobInstances(jobName, start, pageSize))
+                    .thenReturn(instances.subList(start, Math.min(start + pageSize, instances.size())));
+        }
+    }
+
+    /**
+     * Exécutions en échec d'hier, assez nombreuses pour remplir plus d'une page d'historique.
+     */
+    private static List<JobExecution> failuresFillingFirstPage() {
+        List<JobExecution> failures = new ArrayList<>();
+        for (int i = 0; i < DatagouvJobRunDecider.PAGE_SIZE + 5; i++) {
+            failures.add(execution(BatchStatus.FAILED, LocalDateTime.now().minusDays(1), PUBLICATION));
+        }
+        return failures;
     }
 
     private boolean shouldRun() {
@@ -110,6 +125,32 @@ class DatagouvJobRunDeciderTest {
     @Test
     void shouldRun_executionEnEchecUniquement_retourneTrue() throws Exception {
         history(execution(BatchStatus.FAILED, LocalDateTime.now().minusDays(1), PUBLICATION));
+
+        assertThat(shouldRun()).isTrue();
+    }
+
+    @Test
+    void shouldRun_publicationEchoueeHierEtPrecedenteAPlusDe6Mois_retenteAuRunSuivant() throws Exception {
+        // Échec d'hier (ex : téléversement interrompu) : le cron du jour relance l'export complet
+        history(
+                execution(BatchStatus.FAILED, LocalDateTime.now().minusDays(1), PUBLICATION),
+                execution(BatchStatus.COMPLETED, LocalDateTime.now().minusMonths(7), PUBLICATION));
+
+        assertThat(shouldRun()).isTrue();
+    }
+
+    @Test
+    void shouldRun_publicationRecenteAuDelaDeLaPremierePage_retourneFalse() throws Exception {
+        List<JobExecution> executions = failuresFillingFirstPage();
+        executions.add(execution(BatchStatus.COMPLETED, LocalDateTime.now().minusMonths(2), PUBLICATION));
+        history(executions.toArray(JobExecution[]::new));
+
+        assertThat(shouldRun()).isFalse();
+    }
+
+    @Test
+    void shouldRun_aucunePublicationDansToutLHistorique_retourneTrue() throws Exception {
+        history(failuresFillingFirstPage().toArray(JobExecution[]::new));
 
         assertThat(shouldRun()).isTrue();
     }

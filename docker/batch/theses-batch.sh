@@ -22,7 +22,7 @@ fi
 
 # Détection du batch demandé (anr ou datagouv)
 BATCH_TARGET=""
-if [ "$1" = "anr" ] || [ "$1" = "datagouv" ] || [ "$1" = "dump" ]; then
+if [ "$1" = "anr" ] || [ "$1" = "datagouv" ]; then
     BATCH_TARGET="$1"
     shift
 fi

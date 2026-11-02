@@ -26,7 +26,7 @@ Le projet utilise l'architecture standard de l'Abes pour les conteneurs Batch :
 
 ## 🚀 Utilisation avec Docker
 
-Le déploiement se fait avec le dépôt `theses-batch-docker` (deux conteneurs, scripts `scripts/run-anr.sh`, `scripts/run-datagouv.sh` et `scripts/run-batch.sh`).
+Le déploiement se fait avec le dépôt `theses-batch-docker` (deux conteneurs, scripts `scripts/run-anr.sh`, `scripts/run-datagouv.sh` et `run-batch.sh` à la racine).
 Dans un conteneur déjà démarré, un batch se lance avec :
 
 ```bash

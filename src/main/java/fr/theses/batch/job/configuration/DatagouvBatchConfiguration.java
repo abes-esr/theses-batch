@@ -92,6 +92,7 @@ public class DatagouvBatchConfiguration {
      * Reader récupérant les thèses soutenues de façon paginée depuis theses.fr.
      */
     @Bean
+    @StepScope
     public DatagouvThesesItemReader thesesReader(
             RestClient thesesRestClient,
             @Value("${app.theses.page-size:1000}") int pageSize,

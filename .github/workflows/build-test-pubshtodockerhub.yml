@@ -88,11 +88,11 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.DOCKERHUB_IMAGE_PREFIX }}
-          # Tags préfixés par « batch- » car le dépôt abesesr/theses est partagé avec les
-          # autres briques de theses.fr : batch-latest (release), batch-develop, batch-test,
-          # batch-X.Y.Z...
+          # Tags suffixés par « -batch » car le dépôt abesesr/theses est partagé avec les
+          # autres briques de theses.fr : latest-batch (release), develop-batch, test-batch,
+          # X.Y.Z-batch...
           flavor: |
-            prefix=batch-,onlatest=true
+            suffix=-batch,onlatest=true
           # Labels OCI : version, revision, created, source, url et licenses sont
           # remplis automatiquement à partir du dépôt et du commit ; ceux-ci complètent
           # ou remplacent les valeurs par défaut.

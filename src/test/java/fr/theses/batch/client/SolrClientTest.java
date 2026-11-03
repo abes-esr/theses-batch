@@ -96,6 +96,15 @@ class SolrClientTest {
     }
 
     @Test
+    void activeSansUrl_seDesactiveSansContacterSolr() {
+        SolrClient client = client(true, "");
+
+        assertThat(client.isEnabled()).isFalse();
+        assertThat(client.query("*:*")).isEmpty();
+        assertThat(lastQuery.get()).isNull();
+    }
+
+    @Test
     void query_transmetLesParametresEtRenvoieLaReponse() {
         body = "{\"response\":{\"numFound\":1,\"docs\":[{\"nnt\":\"2018PA01\"}]}}";
 

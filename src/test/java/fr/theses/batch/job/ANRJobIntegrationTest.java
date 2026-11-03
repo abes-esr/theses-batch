@@ -1,9 +1,11 @@
 package fr.theses.batch.job;
 
 import fr.theses.batch.support.TestPdfs;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.batch.core.BatchStatus;
+import org.springframework.batch.core.job.Job;
 import org.springframework.batch.core.job.JobExecution;
 import org.springframework.batch.core.step.StepExecution;
 import org.springframework.batch.test.JobOperatorTestUtils;
@@ -43,6 +45,15 @@ class ANRJobIntegrationTest {
     @Autowired
     private JobOperatorTestUtils jobOperatorTestUtils;
 
+    // Plusieurs jobs dans le contexte (ANR, data.gouv) : JobOperatorTestUtils ne peut pas choisir seul
+    @Autowired
+    private Job anrJob;
+
+    @BeforeEach
+    void selectJob() {
+        jobOperatorTestUtils.setJob(anrJob);
+    }
+
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
         createPdfs();
@@ -50,7 +61,7 @@ class ANRJobIntegrationTest {
         registry.add("app.run.timestamp", () -> RUN);
         registry.add("app.anr.pattern", () -> TestPdfs.ANR_PATTERN);
         registry.add("app.anr.input-dir", inputDir::toString);
-        registry.add("app.anr.output-dir", outputDir::toString);
+        registry.add("app.output-dir", outputDir::toString);
         registry.add("app.anr.max-files", () -> "100");
         registry.add("app.anr.offset", () -> "0");
         registry.add("app.anr.nb-pages", () -> "10");

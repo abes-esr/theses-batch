@@ -5,6 +5,7 @@ import fr.theses.batch.business.anr.service.ANRSearchService;
 import fr.theses.batch.util.date.DateUtils;
 import fr.theses.batch.util.file.PdfFileScanner;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.batch.core.configuration.annotation.StepScope;
 import org.springframework.batch.infrastructure.item.ItemReader;
 import org.springframework.batch.infrastructure.item.NonTransientResourceException;
 import org.springframework.batch.infrastructure.item.ParseException;
@@ -29,6 +30,7 @@ import java.util.regex.Pattern;
  * Lit les fichiers PDF dans les répertoires spécifiés
  */
 @Component("anrReader")
+@StepScope
 @Slf4j
 public class ANRReader implements ItemReader<ANRMatchDTO> {
 
@@ -87,7 +89,7 @@ public class ANRReader implements ItemReader<ANRMatchDTO> {
             // Si startFile est spécifié, trouver son index et sauter jusqu'à lui
             if (startFile != null && !startFile.isEmpty()) {
                 boolean found = false;
-                for (int i = 0; fileIterator.hasNext(); i++) {
+                while (fileIterator.hasNext()) {
                     String currentFile = fileIterator.next();
                     consumed++;
                     if (currentFile.equals(startFile) || currentFile.endsWith(startFile)) {

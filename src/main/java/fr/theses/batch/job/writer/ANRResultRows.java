@@ -24,9 +24,17 @@ public class ANRResultRows {
     private final String runTimestamp;
     private final List<ANRResultField> fields;
 
+    /**
+     * Initialise les lignes de résultats ANR avec l'horodatage du run, le répertoire
+     * de sortie global et l'en-tête de colonnes configuré.
+     *
+     * @param runTimestamp Horodatage unique du run courant.
+     * @param outputDir    Répertoire global d'écriture des fichiers de sortie (propriété app.output-dir).
+     * @param header       Liste des champs à inclure dans les exports.
+     */
     public ANRResultRows(
             RunTimestamp runTimestamp,
-            @Value("${app.anr.output-dir:output}") String outputDir,
+            @Value("${app.output-dir:output}") String outputDir,
             @Value("${app.anr.writers.header:file_path,file_name,page_number,match_value,preceding_context,following_context,analyzed_pages_number,total_pages,processing_time,error_message,nnt,doi,defense_date}")
             String header) {
         this.runTimestamp = runTimestamp.value();

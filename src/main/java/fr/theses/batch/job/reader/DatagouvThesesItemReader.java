@@ -17,8 +17,8 @@ import java.util.Set;
  * L'endpoint batch de theses-api-recherche stabilise l'ordre d'une page à l'autre (même copie de l'index,
  * date de soutenance départagée par idDoc). Par sécurité, si une thèse apparaît malgré tout deux fois ou
  * manque (index modifié pendant l'export, ancienne version de l'API), le reader le détecte : les doublons
- * (même NNT, ou même identifiant à défaut) sont ignorés, et la lecture échoue s'il y a moins de thèses
- * distinctes que le totalHits annoncé par la première page. Les thèses ajoutées pendant l'export
+ * (même NNT, ou même identifiant à défaut) sont ignorés, et la lecture échoue s'il manque plus de 1 % de
+ * thèses distinctes par rapport au totalHits annoncé par la première page. Les thèses ajoutées pendant l'export
  * (totalHits dépassé) sont acceptées.
  */
 @Slf4j
@@ -28,6 +28,8 @@ public class DatagouvThesesItemReader implements ItemReader<Thesis> {
     private final int pageSize;
     private final boolean modeTest;
     private static final int MAX_ITEMS_FOR_TEST = 50;
+    /** Tolérance maximale d'écart (1 %) entre le totalHits annoncé et le nombre de thèses distinctes lues. */
+    private static final double MAX_MISSING_RATIO = 0.01;
 
     private int currentDebut = 0;
     private List<Thesis> currentBatch;
@@ -96,7 +98,9 @@ public class DatagouvThesesItemReader implements ItemReader<Thesis> {
     }
 
     /**
-     * Vérifie, une seule fois en fin de lecture, que toutes les thèses annoncées ont été lues.
+     * Vérifie, une seule fois en fin de lecture, que le nombre de thèses distinctes lues
+     * respecte le total annoncé par l'API (avec une tolérance de 1 % pour absorber les rares
+     * doublons de NNT présents dans l'index).
      * Un export vide est aussi refusé. Ignoré en mode test, où la lecture est volontairement limitée.
      */
     private void checkCompleteness() {
@@ -110,9 +114,17 @@ public class DatagouvThesesItemReader implements ItemReader<Thesis> {
         if (!modeTest && readCount == 0) {
             throw new IllegalStateException("Export vide : l'API theses.fr n'a renvoyé aucune thèse soutenue.");
         }
-        if (!modeTest && readCount < expectedTotal) {
+        // Tolérance de 1 % sur le total annoncé : absorbe les quelques doublons de NNT présents dans l'index
+        // tout en bloquant un export réellement tronqué ou victime d'un tri instable
+        long minExpected = expectedTotal - (long) (expectedTotal * MAX_MISSING_RATIO);
+        if (!modeTest && readCount < minExpected) {
             throw new IllegalStateException("Export incomplet : " + readCount + " thèses distinctes lues sur "
-                    + expectedTotal + " annoncées par l'API theses.fr (" + duplicateCount + " doublons ignorés).");
+                    + expectedTotal + " annoncées par l'API theses.fr (" + duplicateCount + " doublons ignorés, "
+                    + "minimum attendu avec tolérance de 1 % : " + minExpected + ").");
+        }
+        if (!modeTest && (readCount < expectedTotal || duplicateCount > 0)) {
+            log.warn("Écart toléré (< 1 %) : {} thèses distinctes lues sur {} annoncées par l'API theses.fr ({} doublons ignorés).",
+                    readCount, expectedTotal, duplicateCount);
         }
     }
 

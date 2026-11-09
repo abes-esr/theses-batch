@@ -1,6 +1,8 @@
 package fr.theses.batch.job.reader;
 
 import fr.theses.batch.business.datagouv.model.Thesis;
+import fr.theses.batch.support.LogCapture;
+import org.apache.logging.log4j.Level;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
@@ -76,7 +78,7 @@ class DatagouvThesesItemReaderTest {
     void read_moinsDeThesesQueTotalHits_echoue() {
         RestClient.Builder builder = RestClient.builder().baseUrl(BASE_URL);
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        // L'API annonce 100 thèses mais la page s'arrête à 3 : export tronqué
+        // L'API annonce 100 thèses mais la page s'arrête à 3 : export tronqué (au-delà de la tolérance de 1 %)
         expectPage(server, 0, 10, 3, 100);
 
         DatagouvThesesItemReader reader = new DatagouvThesesItemReader(builder.build(), 10, false);
@@ -84,6 +86,40 @@ class DatagouvThesesItemReaderTest {
         assertThatThrownBy(() -> readAll(reader))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("3 thèses distinctes lues sur 100");
+    }
+
+    @Test
+    void read_ecartDansLaToleranceDe1Pourcent_accepteEtLogWarn() {
+        RestClient.Builder builder = RestClient.builder().baseUrl(BASE_URL);
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        // 99 thèses distinctes lues sur 100 annoncées (1 % d'écart dû à des doublons dans l'index) : accepté avec WARN
+        expectPage(server, 0, 100, 99, 100);
+
+        DatagouvThesesItemReader reader = new DatagouvThesesItemReader(builder.build(), 100, false);
+
+        try (LogCapture logs = LogCapture.of(DatagouvThesesItemReader.class)) {
+            assertThat(readAll(reader)).hasSize(99);
+            assertThat(logs.messages(Level.WARN))
+                    .singleElement()
+                    .asString()
+                    .contains("99 thèses distinctes lues sur 100 annoncées");
+        }
+        server.verify();
+    }
+
+    @Test
+    void read_ecartAuDelaDe1Pourcent_echoue() {
+        RestClient.Builder builder = RestClient.builder().baseUrl(BASE_URL);
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        // 98 thèses distinctes lues sur 100 annoncées (2 % d'écart > 1 % toléré) : échoue
+        expectPage(server, 0, 100, 98, 100);
+
+        DatagouvThesesItemReader reader = new DatagouvThesesItemReader(builder.build(), 100, false);
+
+        assertThatThrownBy(() -> readAll(reader))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("98 thèses distinctes lues sur 100")
+                .hasMessageContaining("minimum attendu avec tolérance de 1 % : 99");
     }
 
     @Test

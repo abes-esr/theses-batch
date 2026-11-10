@@ -17,6 +17,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -34,6 +35,9 @@ import java.util.UUID;
  * <p>
  * Si le mode test ou upload-enabled=false est configuré, l'upload est ignoré : un export
  * de test (limité à 50 thèses) ne doit jamais remplacer les ressources publiées.
+ * <p>
+ * Une pause configurable (pauseBetweenFiles) sépare deux envois : elle laisse data.gouv.fr terminer
+ * l'assemblage et les traitements du fichier précédent avant d'en assembler un autre.
  * <p>
  * Les 4 ressources sont remplacées l'une après l'autre, sans nouvelle tentative : un échec en cours
  * de route laisse les ressources déjà envoyées à jour et les suivantes à leur version précédente, et
@@ -58,6 +62,16 @@ public class DatagouvUploadTasklet implements Tasklet {
     private final boolean modeTest;
     private final String runTimestamp;
     private final int chunkSize;
+    private final Duration pauseBetweenFiles;
+    private final Sleeper sleeper;
+
+    /**
+     * Attente entre deux envois, remplaçable dans les tests pour ne pas dormir réellement.
+     */
+    @FunctionalInterface
+    interface Sleeper {
+        void sleep(Duration duration) throws InterruptedException;
+    }
 
     /**
      * Constructeur initialisant les dépendances et les identifiants de ressources data.gouv.fr.
@@ -75,13 +89,26 @@ public class DatagouvUploadTasklet implements Tasklet {
      * @param modeTest           Vrai si le mode test est activé : le téléversement est alors toujours ignoré.
      * @param runTimestamp       Horodatage du run au format yyyy-MM-dd-HH-mm-ss.
      * @param chunkSize          Taille maximale en octets d'un morceau envoyé.
+     * @param pauseBetweenFiles  Attente entre la fin d'un envoi et le début du suivant (zéro : aucune pause).
      */
     public DatagouvUploadTasklet(RestClient restClient, String baseUrl, String datasetId, String csvResourceId,
                          String jsonResourceId, String jsonlResourceId, String jsonlGzResourceId,
                          String apiKey, String outputDir, boolean uploadEnabled, boolean modeTest, String runTimestamp,
-                         int chunkSize) {
+                         int chunkSize, Duration pauseBetweenFiles) {
+        this(restClient, baseUrl, datasetId, csvResourceId, jsonResourceId, jsonlResourceId, jsonlGzResourceId,
+                apiKey, outputDir, uploadEnabled, modeTest, runTimestamp, chunkSize, pauseBetweenFiles,
+                duration -> Thread.sleep(duration));
+    }
+
+    DatagouvUploadTasklet(RestClient restClient, String baseUrl, String datasetId, String csvResourceId,
+                          String jsonResourceId, String jsonlResourceId, String jsonlGzResourceId,
+                          String apiKey, String outputDir, boolean uploadEnabled, boolean modeTest, String runTimestamp,
+                          int chunkSize, Duration pauseBetweenFiles, Sleeper sleeper) {
         if (chunkSize <= 0) {
             throw new IllegalArgumentException("La taille des morceaux d'upload doit être positive : " + chunkSize);
+        }
+        if (pauseBetweenFiles == null || pauseBetweenFiles.isNegative()) {
+            throw new IllegalArgumentException("La pause entre deux envois doit être positive ou nulle : " + pauseBetweenFiles);
         }
         this.restClient = restClient;
         // Sans « / » final : UPLOAD_PATH commence déjà par « / »
@@ -97,6 +124,8 @@ public class DatagouvUploadTasklet implements Tasklet {
         this.modeTest = modeTest;
         this.runTimestamp = runTimestamp;
         this.chunkSize = chunkSize;
+        this.pauseBetweenFiles = pauseBetweenFiles;
+        this.sleeper = sleeper;
     }
 
     private static String stripTrailingSlashes(String url) {
@@ -144,6 +173,9 @@ public class DatagouvUploadTasklet implements Tasklet {
         List<String> published = new ArrayList<>();
         for (Map.Entry<String, String> resource : resources.entrySet()) {
             String extension = resource.getKey();
+            if (!published.isEmpty()) {
+                pauseBeforeNextFile();
+            }
             try {
                 uploadFile(extension.toUpperCase(), resource.getValue(), runTimestamp + "_datagouv_results." + extension,
                         "theses-soutenues." + extension);
@@ -161,6 +193,22 @@ public class DatagouvUploadTasklet implements Tasklet {
 
         log.info("Tous les fichiers ont été téléversés avec succès sur data.gouv.fr.");
         return RepeatStatus.FINISHED;
+    }
+
+    /**
+     * Attend pauseBetweenFiles avant l'envoi suivant ; ne fait rien si la pause est nulle.
+     */
+    private void pauseBeforeNextFile() {
+        if (pauseBetweenFiles.isZero()) {
+            return;
+        }
+        log.info("Pause de {} avant l'envoi du fichier suivant (DATA_GOUV_UPLOAD_PAUSE).", pauseBetweenFiles);
+        try {
+            sleeper.sleep(pauseBetweenFiles);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Pause entre deux envois vers data.gouv.fr interrompue.", e);
+        }
     }
 
     /**

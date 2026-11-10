@@ -30,6 +30,9 @@ Le déploiement se fait avec le dépôt `theses-batch-docker` (deux conteneurs, 
 Dans un conteneur déjà démarré, un batch se lance avec :
 
 ```bash
+ssh login@diplotaxis8-prod.v102.abes.fr
+cd /opt/pod/theses-batch-docker
+docker compose up -d
 docker exec theses-batch-anr /scripts/theses-batch-anr.sh
 docker exec theses-batch-datagouv /scripts/theses-batch-datagouv.sh --app.datagouv.force-run=true
 ```

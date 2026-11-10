@@ -15,6 +15,9 @@ import org.springframework.web.client.RestClient;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.regex.Pattern;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -60,7 +63,7 @@ class DatagouvUploadTaskletTest {
         // Aucune requête attendue : un envoi ferait échouer server.verify()
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         DatagouvUploadTasklet tasklet = new DatagouvUploadTasklet(builder.build(), DATA_GOUV_URL, "datasetId", "csvId", "jsonId", "jsonlId",
-                "jsonlGzId", "apiKey", tempDir.toString(), true, true, RUN, 1024 * 1024);
+                "jsonlGzId", "apiKey", tempDir.toString(), true, true, RUN, 1024 * 1024, Duration.ZERO);
 
         RepeatStatus status = tasklet.execute(mock(StepContribution.class), mock(ChunkContext.class));
 
@@ -86,7 +89,7 @@ class DatagouvUploadTaskletTest {
         // Aucune requête attendue : un envoi ferait échouer server.verify()
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         DatagouvUploadTasklet tasklet = new DatagouvUploadTasklet(builder.build(), "", "datasetId", "csvId", "jsonId", "jsonlId",
-                "jsonlGzId", "apiKey", tempDir.toString(), true, false, RUN, 1024 * 1024);
+                "jsonlGzId", "apiKey", tempDir.toString(), true, false, RUN, 1024 * 1024, Duration.ZERO);
 
         assertThatThrownBy(() -> tasklet.execute(mock(StepContribution.class), mock(ChunkContext.class)))
                 .isInstanceOf(IllegalStateException.class)
@@ -101,7 +104,7 @@ class DatagouvUploadTaskletTest {
         // Aucune requête attendue : un envoi partiel ferait échouer server.verify()
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         DatagouvUploadTasklet tasklet = new DatagouvUploadTasklet(builder.build(), DATA_GOUV_URL, "datasetId", "csvId", "jsonId", "jsonlId",
-                "", "apiKey", tempDir.toString(), true, false, RUN, 1024 * 1024);
+                "", "apiKey", tempDir.toString(), true, false, RUN, 1024 * 1024, Duration.ZERO);
 
         assertThatThrownBy(() -> tasklet.execute(mock(StepContribution.class), mock(ChunkContext.class)))
                 .isInstanceOf(IllegalStateException.class)
@@ -183,7 +186,7 @@ class DatagouvUploadTaskletTest {
         expectUpload(server, "jsonlGzId", "theses-soutenues.jsonl.gz", "gz");
 
         DatagouvUploadTasklet tasklet = new DatagouvUploadTasklet(builder.build(), DATA_GOUV_URL, "datasetId", "csvId", "jsonId", "jsonlId",
-                "jsonlGzId", "apiKey", tempDir.toString(), true, false, RUN, 10);
+                "jsonlGzId", "apiKey", tempDir.toString(), true, false, RUN, 10, Duration.ZERO);
 
         tasklet.execute(mock(StepContribution.class), mock(ChunkContext.class));
 
@@ -191,17 +194,73 @@ class DatagouvUploadTaskletTest {
     }
 
     @Test
+    void execute_avecPause_attendEntreDeuxFichiersMaisPasApresLeDernier() throws IOException {
+        createExports();
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        List<String> events = new ArrayList<>();
+        for (String[] upload : new String[][]{
+                {"csvId", "theses-soutenues.csv", "csv;content"},
+                {"jsonId", "theses-soutenues.json", "[{\"json\":true}]"},
+                {"jsonlId", "theses-soutenues.jsonl", "{\"jsonl\":true}"},
+                {"jsonlGzId", "theses-soutenues.jsonl.gz", "gz-content"}}) {
+            server.expect(requestTo(BASE_URL + upload[0] + "/upload/"))
+                    .andExpect(content().string(containsString(upload[2])))
+                    .andRespond(request -> {
+                        events.add(upload[0]);
+                        return withSuccess().createResponse(request);
+                    });
+        }
+        DatagouvUploadTasklet tasklet = new DatagouvUploadTasklet(builder.build(), DATA_GOUV_URL, "datasetId", "csvId",
+                "jsonId", "jsonlId", "jsonlGzId", "apiKey", tempDir.toString(), true, false, RUN, 1024 * 1024,
+                Duration.ofMinutes(10), duration -> events.add("pause " + duration));
+
+        tasklet.execute(mock(StepContribution.class), mock(ChunkContext.class));
+
+        assertThat(events).containsExactly("csvId", "pause PT10M", "jsonId", "pause PT10M", "jsonlId", "pause PT10M",
+                "jsonlGzId");
+        server.verify();
+    }
+
+    @Test
+    void execute_echecDuPremierFichier_neFaitAucunePause() throws IOException {
+        createExports();
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo(BASE_URL + "csvId/upload/")).andRespond(withBadRequest());
+        List<Duration> pauses = new ArrayList<>();
+        DatagouvUploadTasklet tasklet = new DatagouvUploadTasklet(builder.build(), DATA_GOUV_URL, "datasetId", "csvId",
+                "jsonId", "jsonlId", "jsonlGzId", "apiKey", tempDir.toString(), true, false, RUN, 1024 * 1024,
+                Duration.ofMinutes(10), pauses::add);
+
+        assertThatThrownBy(() -> tasklet.execute(mock(StepContribution.class), mock(ChunkContext.class)))
+                .isInstanceOf(HttpClientErrorException.BadRequest.class);
+        assertThat(pauses).isEmpty();
+        server.verify();
+    }
+
+    @Test
+    void constructeur_pauseNegative_leveIllegalArgumentException() {
+        RestClient restClient = mock(RestClient.class);
+        String outputDir = tempDir.toString();
+        Duration pause = Duration.ofSeconds(-1);
+        assertThatThrownBy(() -> new DatagouvUploadTasklet(restClient, DATA_GOUV_URL, "datasetId", "csvId", "jsonId", "jsonlId",
+                "jsonlGzId", "apiKey", outputDir, true, false, RUN, 1024 * 1024, pause))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     void constructeur_tailleDeMorceauNulle_leveIllegalArgumentException() {
         RestClient restClient = mock(RestClient.class);
         String outputDir = tempDir.toString();
         assertThatThrownBy(() -> new DatagouvUploadTasklet(restClient, DATA_GOUV_URL, "datasetId", "csvId", "jsonId", "jsonlId",
-                "jsonlGzId", "apiKey", outputDir, true, false, RUN, 0))
+                "jsonlGzId", "apiKey", outputDir, true, false, RUN, 0, Duration.ZERO))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     private DatagouvUploadTasklet tasklet(RestClient restClient, boolean uploadEnabled) {
         return new DatagouvUploadTasklet(restClient, DATA_GOUV_URL, "datasetId", "csvId", "jsonId", "jsonlId",
-                "jsonlGzId", "apiKey", tempDir.toString(), uploadEnabled, false, RUN, 1024 * 1024);
+                "jsonlGzId", "apiKey", tempDir.toString(), uploadEnabled, false, RUN, 1024 * 1024, Duration.ZERO);
     }
 
     private void createExports() throws IOException {

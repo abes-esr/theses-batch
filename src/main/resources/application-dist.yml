@@ -93,6 +93,8 @@ app:
     upload-enabled: ${DATA_GOUV_UPLOAD_ENABLED:false}
     # Les fichiers plus gros sont envoyés en plusieurs morceaux de cette taille (un seul morceau en mémoire à la fois).
     upload-chunk-size: ${DATA_GOUV_UPLOAD_CHUNK_SIZE:10MB}
+    # Pause entre deux fichiers envoyés : laisse data.gouv.fr finir l'assemblage du précédent (0s : aucune pause)
+    upload-pause: ${DATA_GOUV_UPLOAD_PAUSE:2m}
     # Timeouts du téléversement : un envoi bloqué fait échouer le run, retenté au cron suivant
     connect-timeout: ${DATA_GOUV_CONNECT_TIMEOUT:30s}
     # Temps maximal d'attente d'une réponse (envoi d'un morceau ou assemblage final)

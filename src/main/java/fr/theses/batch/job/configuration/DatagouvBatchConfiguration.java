@@ -244,10 +244,11 @@ public class DatagouvBatchConfiguration {
             @Value("${app.datagouv.upload-enabled:false}") boolean uploadEnabled,
             @Value("${app.datagouv.mode-test:false}") boolean modeTest,
             @Value("${app.datagouv.upload-chunk-size:10MB}") DataSize uploadChunkSize,
+            @Value("${app.datagouv.upload-pause:0s}") Duration uploadPause,
             RunTimestamp runTimestamp) {
         return new DatagouvUploadTasklet(dataGouvRestClient, baseUrl, datasetId, csvResourceId, jsonResourceId,
                 jsonlResourceId, jsonlGzResourceId, apiKey, DatagouvOutputListener.tmpDir(outputDir).getPath(), uploadEnabled, modeTest, runTimestamp.value(),
-                Math.toIntExact(uploadChunkSize.toBytes()));
+                Math.toIntExact(uploadChunkSize.toBytes()), uploadPause);
     }
 
     /**

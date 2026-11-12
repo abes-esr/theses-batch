@@ -2,7 +2,10 @@ package fr.theses.batch.job.processor;
 
 import fr.theses.batch.business.anr.model.dto.ANRMatchDTO;
 import fr.theses.batch.business.anr.model.dto.ANRPageMatchDTO;
+import fr.theses.batch.job.listener.ANRRunStatistics;
+import fr.theses.batch.util.log.BenignPdfWarnings;
 import fr.theses.batch.util.log.PdfWarningCollector;
+import fr.theses.batch.util.log.PdfWarningSummary;
 import fr.theses.batch.util.parser.PDFExtraction;
 import fr.theses.batch.util.parser.PDFTextExtractor;
 import jakarta.annotation.PostConstruct;
@@ -11,16 +14,17 @@ import org.springframework.batch.infrastructure.item.ItemProcessor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.LongSupplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Processor pour le traitement ANR
@@ -38,11 +42,13 @@ public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
     @Value("${app.anr.input-dir:/input}")
     private String inputDir;
     private final PDFTextExtractor pdfTextExtractor;
+    private final ANRRunStatistics statistics;
     private Pattern anrPattern;
     private Path inputPath;
 
-    public ANRProcessor(PDFTextExtractor pdfTextExtractor) {
+    public ANRProcessor(PDFTextExtractor pdfTextExtractor, ANRRunStatistics statistics) {
         this.pdfTextExtractor = pdfTextExtractor;
+        this.statistics = statistics;
     }
 
     @PostConstruct
@@ -51,9 +57,27 @@ public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
         this.inputPath = Path.of(inputDir).toAbsolutePath().normalize();
     }
 
+    /**
+     * Au-delà de cette durée, un fichier sans rien d'autre à signaler est tout de même journalisé en
+     * INFO : un fichier lent retient tout son chunk, les autres threads l'attendant pour finir.
+     */
+    static final Duration SLOW_FILE = Duration.ofSeconds(10);
+
+    /**
+     * Part de texte perdu (en %) à partir de laquelle un fichier est journalisé en WARN ; en dessous, en
+     * INFO. Une perte inférieure vient presque toujours de polices de symboles (CMSY, MSAM, Wingdings…),
+     * qui ne portent pas de numéro ANR.
+     */
+    static final double LOST_TEXT_WARN_PERCENT = 1.0;
+
+    /**
+     * Horloge en nanosecondes, remplaçable en test
+     */
+    private LongSupplier nanoClock = System::nanoTime;
+
     @Override
     public ANRMatchDTO process(ANRMatchDTO item) throws Exception {
-        Instant startTime = Instant.now();
+        long startNanos = nanoClock.getAsLong();
         PdfWarningCollector.start();
         PDFExtraction extraction = null;
 
@@ -94,29 +118,49 @@ public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
                 return null;
             }
 
-            // Calculer la durée
-            Duration processingDuration = Duration.between(startTime, Instant.now());
-
             // Mettre à jour le DTO
             return item
                     .withPageMatches(pageMatches)
                     .withPagesAnalyzed(pages.size())
                     .withTotalPages(extraction.totalPages())
-                    .withProcessingTime(processingDuration.toMillis() / 1000.0);
+                    .withProcessingTime(seconds(nanoClock.getAsLong() - startNanos));
 
         } catch (Exception e) {
             // Capturer TOUTE exception (PDF malformé = problème de données, pas bug)
             // Retourner un DTO avec error_message au lieu de propager
-            Duration processingDuration = Duration.between(startTime, Instant.now());
-            String filePath = item.filePath();
-            log.warn("Erreur lors du traitement du fichier {} (PDF malformé) : {}", 
-                   relativeToInputDir(filePath), e.getMessage(), e);
-            return item
-                    .withProcessingTime(processingDuration.toMillis() / 1000.0)
-                    .withErrorMessage("Erreur PDF: " + e.getMessage());
+            // Le message suffit pour un fichier corrompu ; la pile (≈ 30 lignes) seulement en DEBUG
+            log.warn("Erreur lors du traitement du fichier {} (PDF malformé) : {}",
+                    relativeToInputDir(item.filePath()), e.getMessage());
+            log.debug("Pile de l'erreur pour {}", relativeToInputDir(item.filePath()), e);
+            return withError(item, e.getMessage(), startNanos);
+        } catch (StackOverflowError e) {
+            // PDFBox récurse sans fin sur certains PDF (ex. PDPage.removeResources en 3.0.8, ressources de
+            // formulaires imbriquées) : une Error, qui ferait échouer tout le step. La pile est déroulée et
+            // le document n'est utilisé que par ce thread, on peut continuer. Trace omise : 1 024 frames identiques.
+            String message = "débordement de pile (StackOverflowError)";
+            log.warn("Erreur lors du traitement du fichier {} (PDF malformé) : {}",
+                    relativeToInputDir(item.filePath()), message);
+            return withError(item, message, startNanos);
         } finally {
-            logExtractionSummary(relativeToInputDir(item.filePath()), extraction);
+            logExtractionSummary(relativeToInputDir(item.filePath()), extraction,
+                    nanoClock.getAsLong() - startNanos);
         }
+    }
+
+    /**
+     * DTO du fichier en erreur, avec sa durée de traitement
+     */
+    private ANRMatchDTO withError(ANRMatchDTO item, String message, long startNanos) {
+        return item
+                .withProcessingTime(seconds(nanoClock.getAsLong() - startNanos))
+                .withErrorMessage("Erreur PDF: " + message);
+    }
+
+    /**
+     * Durée en secondes, à la milliseconde près
+     */
+    private static double seconds(long nanos) {
+        return Math.round(nanos / 1e6) / 1000.0;
     }
 
     /**
@@ -131,24 +175,51 @@ public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
     }
 
     /**
-     * Journalise en un seul message la qualité de l'extraction de ce fichier : part du texte perdu
-     * (glyphes sans caractère Unicode), part reconstituée via les polices système, et avertissements
-     * PDFBox / FontBox regroupés par type, triés par nombre décroissant.
-     * Rien n'est écrit si l'extraction est complète et sans avertissement ; un fichier dont le texte a été
-     * entièrement reconstitué est signalé en INFO.
+     * Journalise en un seul message le coût et la qualité de l'extraction de ce fichier : durée de
+     * traitement, taille, pages lues sur le total, part du texte perdu (glyphes sans caractère
+     * Unicode), part reconstituée via les polices système, et avertissements PDFBox / FontBox
+     * regroupés par type ({@link PdfWarningSummary}) : d'abord ceux qui peuvent affecter le texte, puis
+     * les bénins ({@link BenignPdfWarnings}, ex. remplacement d'une police simple non embarquée), chaque
+     * groupe trié par nombre décroissant ; l'en-tête les distingue, ex. « 3 avertissement(s) PDFBox
+     * (+ 12 bénin(s)) : ». Des avertissements bénins seuls ne sont que comptés, sans détail.
+     * <p>
+     * Niveau : WARN si au moins LOST_TEXT_WARN_PERCENT du texte est perdu, ou s'il y a un avertissement
+     * ni bénin ni déjà mesuré par le texte perdu ({@link BenignPdfWarnings#isMeasuredByLostText}). Sinon
+     * INFO si du texte a été perdu ou reconstitué, s'il reste un avertissement non bénin, ou si le
+     * fichier est plus lent que SLOW_FILE, DEBUG
+     * dans les autres cas (--logging.level.fr.theses.batch.job.processor.ANRProcessor=DEBUG pour avoir
+     * la durée et la taille de chaque fichier).
+     * <p>
+     * Le fichier est aussi compté dans les statistiques du run ({@link ANRRunStatistics}).
      *
      * @param relativePath Chemin du fichier relatif à app.anr.input-dir
      * @param extraction   Résultat de l'extraction, null si le fichier n'a pas pu être lu
+     * @param elapsedNanos Durée de traitement du fichier
      */
-    private void logExtractionSummary(String relativePath, PDFExtraction extraction) {
+    private void logExtractionSummary(String relativePath, PDFExtraction extraction, long elapsedNanos) {
         Map<String, Integer> warnings = PdfWarningCollector.stop();
         boolean lost = extraction != null && extraction.lostGlyphs() > 0;
         boolean recovered = extraction != null && extraction.recoveredGlyphs() > 0;
-        if (warnings.isEmpty() && !lost && !recovered) {
+        boolean slow = elapsedNanos >= SLOW_FILE.toNanos();
+        Map<Boolean, List<Map.Entry<String, Integer>>> byBenign = warnings.entrySet().stream()
+                .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
+                .collect(Collectors.partitioningBy(e -> BenignPdfWarnings.isBenign(e.getKey())));
+        List<Map.Entry<String, Integer>> harmful = byBenign.get(false);
+        List<Map.Entry<String, Integer>> benign = byBenign.get(true);
+        boolean unmeasured = harmful.stream().anyMatch(e -> !BenignPdfWarnings.isMeasuredByLostText(e.getKey()));
+        boolean muchLost = extraction != null && extraction.lostPercent() >= LOST_TEXT_WARN_PERCENT;
+        statistics.record(relativePath, extraction, elapsedNanos, !harmful.isEmpty());
+        if (harmful.isEmpty() && !lost && !recovered && !slow && !log.isDebugEnabled()) {
             return;
         }
 
-        StringBuilder message = new StringBuilder(relativePath);
+        StringBuilder message = new StringBuilder(relativePath)
+                .append(String.format(Locale.FRANCE, " (%.1f s", elapsedNanos / 1e9));
+        if (extraction != null) {
+            message.append(String.format(Locale.FRANCE, ", %.1f Mo, %d/%d pages",
+                    extraction.fileSize() / 1_048_576.0, extraction.pages().size(), extraction.totalPages()));
+        }
+        message.append(')');
         if (extraction != null) {
             message.append(String.format(Locale.FRANCE, " : texte perdu %s (%d/%d glyphes)",
                     formatPercent(extraction.lostPercent()), extraction.lostGlyphs(), extraction.glyphs()));
@@ -158,18 +229,33 @@ public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
                     .append(" via les polices système");
         }
         if (!warnings.isEmpty()) {
-            int total = warnings.values().stream().mapToInt(Integer::intValue).sum();
-            message.append(", ").append(total).append(" avertissement(s) PDFBox :");
-            warnings.entrySet().stream()
-                    .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
-                    .forEach(e -> message.append(String.format("%n    %5d x %s", e.getValue(), e.getKey())));
+            int harmfulTotal = total(harmful);
+            int benignTotal = total(benign);
+            message.append(", ");
+            if (harmfulTotal == 0) {
+                message.append(benignTotal).append(" avertissement(s) PDFBox bénin(s)");
+            } else {
+                message.append(harmfulTotal).append(" avertissement(s) PDFBox");
+                if (benignTotal > 0) {
+                    message.append(" (+ ").append(benignTotal).append(" bénin(s))");
+                }
+                message.append(" :");
+                Stream.concat(PdfWarningSummary.lines(harmful).stream(), PdfWarningSummary.lines(benign).stream())
+                        .forEach(line -> message.append(String.format("%n    %s", line)));
+            }
         }
 
-        if (lost || !warnings.isEmpty()) {
+        if (muchLost || unmeasured) {
             log.warn("{}", message);
-        } else {
+        } else if (lost || !harmful.isEmpty() || recovered || slow) {
             log.info("{}", message);
+        } else {
+            log.debug("{}", message);
         }
+    }
+
+    private static int total(List<Map.Entry<String, Integer>> warnings) {
+        return warnings.stream().mapToInt(Map.Entry::getValue).sum();
     }
 
     /**
@@ -196,6 +282,17 @@ public class ANRProcessor implements ItemProcessor<ANRMatchDTO, ANRMatchDTO> {
 
         int start = before ? Math.max(0, position - length) : position;
         int end = before ? position : Math.min(text.length(), position + length);
+
+        // Ne pas couper une paire de surrogates (caractère hors BMP, ex. 𝑥 U+1D465) : une demi-paire
+        // isolée n'est pas encodable en UTF-8. Le caractère coupé est laissé hors du contexte.
+        if (start > 0 && start < end && Character.isLowSurrogate(text.charAt(start))
+                && Character.isHighSurrogate(text.charAt(start - 1))) {
+            start++;
+        }
+        if (end < text.length() && end > start && Character.isLowSurrogate(text.charAt(end))
+                && Character.isHighSurrogate(text.charAt(end - 1))) {
+            end--;
+        }
 
         return text.substring(start, end);
     }

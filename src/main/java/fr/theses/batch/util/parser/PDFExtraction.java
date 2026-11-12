@@ -10,9 +10,10 @@ import java.util.List;
  * @param glyphs          Nombre de glyphes affichés sur les pages lues
  * @param lostGlyphs      Glyphes sans caractère Unicode connu, absents du texte extrait
  * @param recoveredGlyphs Glyphes dont le caractère a été reconstitué via les polices système
+ * @param fileSize        Taille du fichier en octets
  */
 public record PDFExtraction(List<PDFTextExtractor.PDFPage> pages, int totalPages,
-                            int glyphs, int lostGlyphs, int recoveredGlyphs) {
+                            int glyphs, int lostGlyphs, int recoveredGlyphs, long fileSize) {
 
     public double lostPercent() {
         return percent(lostGlyphs);

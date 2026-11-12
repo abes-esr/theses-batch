@@ -3,16 +3,23 @@ package fr.theses.batch.util.parser;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.cos.COSDictionary;
-import org.apache.pdfbox.io.RandomAccessReadBufferedFile;
+import org.apache.pdfbox.io.RandomAccessRead;
+import org.apache.pdfbox.io.RandomAccessReadBuffer;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.font.PDFont;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.apache.pdfbox.util.Matrix;
 import org.apache.pdfbox.util.Vector;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.util.unit.DataSize;
 
-import java.io.File;
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.file.NoSuchFileException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -27,10 +34,49 @@ import java.util.Set;
 @Slf4j
 public class PDFTextExtractor {
 
+    /** Valeur par défaut de app.anr.in-memory-max-size */
+    static final DataSize DEFAULT_IN_MEMORY_MAX_SIZE = DataSize.ofMegabytes(64);
+
+    /**
+     * Taille des lectures d'un PDF chargé en mémoire. Le JDK fait passer chaque lecture par un
+     * tampon direct de cette taille qu'il garde ensuite pour le thread : lire le fichier d'un seul
+     * appel en garderait un de la taille du plus gros PDF lu, par thread.
+     */
+    static final int READ_BLOCK_SIZE = 1 << 20;
+
+    /** Valeur par défaut de app.anr.read-block-size : le rsize du montage NFS de production */
+    static final DataSize DEFAULT_READ_BLOCK_SIZE = DataSize.ofKilobytes(128);
+
     private final SystemFontUnicodeRecovery unicodeRecovery;
+    private final long inMemoryMaxBytes;
+    private final int blockSize;
 
     public PDFTextExtractor(SystemFontUnicodeRecovery unicodeRecovery) {
+        this(unicodeRecovery, DEFAULT_IN_MEMORY_MAX_SIZE, DEFAULT_READ_BLOCK_SIZE);
+    }
+
+    public PDFTextExtractor(SystemFontUnicodeRecovery unicodeRecovery, DataSize inMemoryMaxSize) {
+        this(unicodeRecovery, inMemoryMaxSize, DEFAULT_READ_BLOCK_SIZE);
+    }
+
+    /**
+     * @param inMemoryMaxSize Taille maximale d'un PDF lu en entier en mémoire avant l'analyse ;
+     *                        au-delà (ou avec 0), il est lu par blocs au fil de l'analyse
+     * @param readBlockSize   Taille de ces blocs, de 1 octet à {@link #READ_BLOCK_SIZE} : au-delà, le JDK
+     *                        garderait pour chaque thread un tampon direct de cette taille
+     */
+    @Autowired
+    public PDFTextExtractor(SystemFontUnicodeRecovery unicodeRecovery,
+                            @Value("${app.anr.in-memory-max-size:64MB}") DataSize inMemoryMaxSize,
+                            @Value("${app.anr.read-block-size:128KB}") DataSize readBlockSize) {
+        if (readBlockSize.toBytes() < 1 || readBlockSize.toBytes() > READ_BLOCK_SIZE) {
+            throw new IllegalArgumentException("app.anr.read-block-size doit être compris entre 1B et 1MB : "
+                    + readBlockSize);
+        }
         this.unicodeRecovery = unicodeRecovery;
+        // Un tableau Java ne dépasse pas 2 Go
+        this.inMemoryMaxBytes = Math.min(inMemoryMaxSize.toBytes(), Integer.MAX_VALUE - 8);
+        this.blockSize = (int) readBlockSize.toBytes();
     }
 
     /**
@@ -49,11 +95,13 @@ public class PDFTextExtractor {
     public PDFExtraction extractTextFromPdf(String filePath, int maxPages) throws IOException {
         List<PDFPage> pages = new ArrayList<>();
 
-        if (filePath == null || !new File(filePath).exists()) {
-            throw new IOException("File not found: " + filePath);
+        if (filePath == null) {
+            throw new IOException("File not found: null");
         }
 
-        try (PDDocument document = Loader.loadPDF(new RandomAccessReadBufferedFile(new File(filePath)))) {
+        RandomAccessRead input = open(filePath);
+        long fileSize = input.length();
+        try (PDDocument document = Loader.loadPDF(input)) {
             int pageCount = document.getNumberOfPages();
             int pagesToRead = maxPages > 0 ? Math.min(maxPages, pageCount) : pageCount;
 
@@ -77,8 +125,56 @@ public class PDFTextExtractor {
                 pages.add(new PDFPage(i + 1, text));
             }
 
-            return new PDFExtraction(pages, pageCount, stripper.glyphs, stripper.lostGlyphs, stripper.recoveredGlyphs);
+            return new PDFExtraction(pages, pageCount, stripper.glyphs, stripper.lostGlyphs, stripper.recoveredGlyphs,
+                    fileSize);
         }
+    }
+
+    /**
+     * Ouvre le PDF pour PDFBox. Jusqu'à app.anr.in-memory-max-size, il est lu en entier, du début
+     * à la fin, par blocs de {@link #READ_BLOCK_SIZE} : sur NFS, le client envoie alors des requêtes
+     * de taille maximale (rsize) et lit en avance, alors que PDFBox, qui saute d'un objet à l'autre
+     * par pages de 4 ko, coûte un aller-retour avec le serveur presque à chaque page. Au-delà, seuls
+     * les blocs de app.anr.read-block-size où PDFBox lit sont chargés, chacun une seule fois (voir
+     * {@link BlockCachedRandomAccessRead}).
+     * <p>
+     * Pas de File.exists() préalable : l'ouverture signale déjà un fichier absent, et sur NFS
+     * chaque appel système de plus coûte un aller-retour avec le serveur. La taille est celle du
+     * fichier déjà ouvert.
+     */
+    RandomAccessRead open(String filePath) throws IOException {
+        FileChannel channel;
+        try {
+            channel = FileChannel.open(Path.of(filePath));
+        } catch (NoSuchFileException e) {
+            throw new IOException("File not found: " + filePath, e);
+        }
+        try {
+            long size = channel.size();
+            if (size > inMemoryMaxBytes) {
+                return new BlockCachedRandomAccessRead(channel, blockSize);
+            }
+            try (channel) {
+                return new RandomAccessReadBuffer(readFully(channel, (int) size, filePath));
+            }
+        } catch (IOException | RuntimeException e) {
+            channel.close();
+            throw e;
+        }
+    }
+
+    private static byte[] readFully(FileChannel channel, int size, String filePath) throws IOException {
+        byte[] content = new byte[size];
+        int position = 0;
+        while (position < size) {
+            int read = channel.read(ByteBuffer.wrap(content, position, Math.min(READ_BLOCK_SIZE, size - position)));
+            if (read < 0) {
+                throw new IOException("Fichier raccourci pendant sa lecture (" + position + " octets sur " + size
+                        + ") : " + filePath);
+            }
+            position += read;
+        }
+        return content;
     }
 
     /**

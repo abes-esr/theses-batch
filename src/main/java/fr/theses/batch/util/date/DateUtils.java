@@ -48,4 +48,28 @@ public class DateUtils {
     public static String getCurrentDateTimeForFileName() {
         return formatForFileName(LocalDateTime.now());
     }
+
+    /**
+     * Durée lisible : en millisecondes sous la seconde, à la seconde près sous l'heure, à la minute
+     * près au-delà (ex. « 850 ms », « 27 min 11 s », « 1 h 28 min »). Une durée nulle ou négative
+     * donne « 0 s ».
+     *
+     * @param nanos Durée en nanosecondes
+     * @return Durée formatée
+     */
+    public static String formatDuration(long nanos) {
+        if (nanos > 0 && nanos < 999_500_000L) {
+            return Math.round(nanos / 1e6) + " ms";
+        }
+        long seconds = Math.max(0, Math.round(nanos / 1e9));
+        long hours = seconds / 3600;
+        long minutes = seconds % 3600 / 60;
+        if (hours > 0) {
+            return hours + " h " + minutes + " min";
+        }
+        if (minutes > 0) {
+            return minutes + " min " + seconds % 60 + " s";
+        }
+        return seconds + " s";
+    }
 }

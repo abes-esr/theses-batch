@@ -24,9 +24,17 @@ public class ANRResultRows {
     private final String runTimestamp;
     private final List<ANRResultField> fields;
 
+    /**
+     * Initialise les lignes de résultats ANR avec l'horodatage du run, le répertoire
+     * de sortie global et l'en-tête de colonnes configuré.
+     *
+     * @param runTimestamp Horodatage unique du run courant.
+     * @param outputDir    Répertoire global d'écriture des fichiers de sortie (propriété app.output-dir).
+     * @param header       Liste des champs à inclure dans les exports.
+     */
     public ANRResultRows(
             RunTimestamp runTimestamp,
-            @Value("${app.anr.output-dir:output}") String outputDir,
+            @Value("${app.output-dir:output}") String outputDir,
             @Value("${app.anr.writers.header:file_path,file_name,page_number,match_value,preceding_context,following_context,analyzed_pages_number,total_pages,processing_time,error_message,nnt,doi,defense_date}")
             String header) {
         this.runTimestamp = runTimestamp.value();
@@ -98,9 +106,38 @@ public class ANRResultRows {
     private Map<String, Object> toRow(ANRMatchDTO item, ANRPageMatchDTO pageMatch) {
         Map<String, Object> row = new LinkedHashMap<>();
         for (ANRResultField field : fields) {
-            row.put(field.fieldName(), field.extract(item, pageMatch));
+            Object value = field.extract(item, pageMatch);
+            row.put(field.fieldName(), value instanceof String text ? replaceLoneSurrogates(text) : value);
         }
         return row;
+    }
+
+    /**
+     * Remplace par U+FFFD chaque demi-paire de surrogates isolée : PDFBox en produit à partir de tables
+     * /ToUnicode malformées, et l'encodeur UTF-8 la rejette (MalformedInputException), ce qui fait échouer
+     * tout le step. Les paires complètes (caractères hors BMP) sont conservées.
+     */
+    static String replaceLoneSurrogates(String text) {
+        StringBuilder result = null;
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            boolean pairStart = Character.isHighSurrogate(c) && i + 1 < text.length()
+                    && Character.isLowSurrogate(text.charAt(i + 1));
+            if (pairStart) {
+                if (result != null) {
+                    result.append(c).append(text.charAt(i + 1));
+                }
+                i++;
+            } else if (Character.isSurrogate(c)) {
+                if (result == null) {
+                    result = new StringBuilder(text.length()).append(text, 0, i);
+                }
+                result.append('�');
+            } else if (result != null) {
+                result.append(c);
+            }
+        }
+        return result != null ? result.toString() : text;
     }
 
     /**

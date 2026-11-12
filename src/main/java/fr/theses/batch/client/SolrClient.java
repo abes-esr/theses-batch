@@ -28,7 +28,7 @@ public class SolrClient {
     private RestClient restClient;
     @Value("${app.solr.enabled:false}")
     private boolean enabled;
-    @Value("${app.solr.base-url:http://localhost:8983/solr1}")
+    @Value("${app.solr.base-url:}")
     private String baseUrl;
     @Value("${app.solr.connect-timeout:5000}")
     private int connectTimeout;
@@ -42,6 +42,14 @@ public class SolrClient {
 
     @PostConstruct
     public void init() {
+        if (enabled && (baseUrl == null || baseUrl.isBlank())) {
+            // Pas d'échec au démarrage : le conteneur Datagouv n'utilise pas Solr
+            log.error("Solr activé mais THESES_BATCH_SOLR_BASE_URL non renseignée : enrichissement Solr désactivé.");
+            enabled = false;
+        }
+        if (!enabled) {
+            return;
+        }
         String fullBaseUrl = getBaseUrl();
 
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
@@ -77,6 +85,7 @@ public class SolrClient {
      * @param rows Nombre maximum de résultats (paramètre rows)
      * @return Map contenant la réponse JSON de Solr
      */
+    @SuppressWarnings("unchecked")
     public Map<String, Object> query(String query, String fields, int rows) {
         if (!enabled) {
             log.debug("Solr est désactivé, retour de réponse vide");
@@ -184,7 +193,6 @@ public class SolrClient {
      * @param fieldName Nom du champ
      * @return Valeur du champ, ou null
      */
-    @SuppressWarnings("unchecked")
     public String extractFieldValue(Map<String, Object> document, String fieldName) {
         if (document == null || fieldName == null || !document.containsKey(fieldName)) {
             return null;

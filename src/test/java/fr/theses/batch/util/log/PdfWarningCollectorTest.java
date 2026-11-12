@@ -46,7 +46,7 @@ class PdfWarningCollectorTest {
         Map<String, Integer> counts = PdfWarningCollector.stop();
 
         assertThat(counts).containsExactly(
-                Map.entry("WARN PDSimpleFont - No Unicode mapping in font ABCDEF+Calibri", 2),
+                Map.entry("WARN PDSimpleFont - No Unicode mapping in font Calibri", 2),
                 Map.entry("ERROR Parser - Bad offset N at N", 2));
     }
 
@@ -68,5 +68,43 @@ class PdfWarningCollectorTest {
         PdfWarningCollector.start();
         assertThat(filter.filter(event)).isEqualTo(Filter.Result.DENY);
         assertThat(PdfWarningCollector.stop()).containsEntry("WARN Foo - x", 1);
+    }
+
+    @Test
+    void nomsDePolice_normalisesPourRegrouperLesDeclinaisons() {
+        PdfWarningCollector.start();
+
+        String type0 = "org.apache.pdfbox.pdmodel.font.PDType0Font";
+        PdfWarningCollector.collect(event(type0, Level.WARN, "No Unicode mapping for CID+1 (1) in font ABCDEF+Cambria#20Math"));
+        PdfWarningCollector.collect(event(type0, Level.WARN,
+                "No Unicode mapping for CID+2 (2) in font GHIJKL+Cambria#2320Math-Identity-H-Identity-H"));
+        PdfWarningCollector.collect(event("org.apache.pdfbox.pdmodel.font.PDType1Font", Level.WARN,
+                "Using fallback font LiberationSans for base font Helvetica"));
+        PdfWarningCollector.collect(event("org.apache.pdfbox.pdmodel.font.PDCIDFontType2", Level.WARN,
+                "Using fallback font LiberationSans for CID-keyed TrueType font ABCDEF+Calibri"));
+        PdfWarningCollector.collect(event("org.apache.fontbox.ttf.PostScriptTable", Level.WARN,
+                "No PostScript name data is provided for the font CMSY10"));
+
+        assertThat(PdfWarningCollector.stop()).containsExactly(
+                Map.entry("WARN PDType0Font - No Unicode mapping in font Cambria Math", 2),
+                Map.entry("WARN PDType1Font - Using fallback font LiberationSans for Helvetica", 1),
+                Map.entry("WARN PDCIDFontType2 - Using fallback font LiberationSans for CID-keyed TrueType font Calibri", 1),
+                Map.entry("WARN PostScriptTable - No PostScript name data is provided for the font CMSY10", 1));
+    }
+
+    @Test
+    void nomDePolice_echappementsNonImprimablesConserves() {
+        assertThat(PdfWarningCollector.fontName("#cb#ce#cc#e5-Identity-H")).isEqualTo("#cb#ce#cc#e5");
+        assertThat(PdfWarningCollector.fontName("-Identity-H")).isEqualTo("-Identity-H");
+    }
+
+    @Test
+    void record_comptabiliseSeulementEnCollecte() {
+        assertThat(PdfWarningCollector.record("WARN Foo - x")).isFalse();
+
+        PdfWarningCollector.start();
+        assertThat(PdfWarningCollector.record("WARN Foo - x")).isTrue();
+        assertThat(PdfWarningCollector.record("WARN Foo - x")).isTrue();
+        assertThat(PdfWarningCollector.stop()).containsExactly(Map.entry("WARN Foo - x", 2));
     }
 }

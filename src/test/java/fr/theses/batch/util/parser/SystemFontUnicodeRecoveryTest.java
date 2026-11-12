@@ -4,11 +4,17 @@ import fr.theses.batch.support.TestPdfs;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.cos.COSDictionary;
 import org.apache.pdfbox.cos.COSName;
+import org.apache.pdfbox.cos.COSObject;
 import org.apache.pdfbox.cos.COSStream;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.PDResources;
+import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.font.PDTrueTypeFont;
+import org.apache.pdfbox.pdmodel.font.PDType1Font;
+import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
+import org.apache.pdfbox.pdmodel.graphics.form.PDFormXObject;
 import org.apache.pdfbox.pdmodel.font.encoding.WinAnsiEncoding;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,6 +28,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -214,6 +221,73 @@ class SystemFontUnicodeRecoveryTest {
             COSDictionary font = recovered.keySet().iterator().next();
             assertThat(font.getDictionaryObject(COSName.TO_UNICODE)).isInstanceOf(COSStream.class);
         }
+    }
+
+    /**
+     * Page dont chaque formulaire a pour /Resources le dictionnaire de ressources de la page elle-même, qui
+     * les contient tous (5 859 formulaires dans NANU/THESE_215271/document/0/1/VERRON2.pdf). La page affiche
+     * le texte et dessine le premier formulaire.
+     */
+    private Path createSharedResourcesForms(Path file, int forms) throws IOException {
+        try (PDDocument document = new PDDocument()) {
+            PDPage page = new PDPage();
+            document.addPage(page);
+            PDResources resources = new PDResources();
+            page.setResources(resources);
+            COSDictionary xobjects = new COSDictionary();
+            resources.getCOSObject().setItem(COSName.XOBJECT, xobjects);
+            for (int i = 0; i < forms; i++) {
+                PDFormXObject form = new PDFormXObject(document);
+                form.setBBox(new PDRectangle(10, 10));
+                form.getCOSObject().setItem(COSName.RESOURCES, resources.getCOSObject());
+                xobjects.setItem(COSName.getPDFName("Fm" + i), form);
+            }
+            try (PDPageContentStream content = new PDPageContentStream(document, page)) {
+                content.beginText();
+                content.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), 12);
+                content.newLineAtOffset(50, 700);
+                content.showText(TEXT);
+                content.endText();
+                content.drawForm((PDFormXObject) resources.getXObject(COSName.getPDFName("Fm0")));
+            }
+            document.save(file.toFile());
+        }
+        return file;
+    }
+
+    @Test
+    void recover_neMetAucunFormulaireEnCache() throws IOException {
+        Path pdf = createSharedResourcesForms(tempDir.resolve("formulaires.pdf"), 3);
+
+        try (PDDocument document = Loader.loadPDF(pdf.toFile())) {
+            recovery.recover(document, 1);
+
+            COSDictionary xobjects = document.getPage(0).getCOSObject()
+                    .getCOSDictionary(COSName.RESOURCES).getCOSDictionary(COSName.XOBJECT);
+            for (COSName name : xobjects.keySet()) {
+                assertThat(document.getResourceCache().getXObject((COSObject) xobjects.getItem(name))).isNull();
+            }
+        }
+    }
+
+    @Test
+    void milliersDeFormulairesPartageantLesRessourcesDeLaPage_pasDeDebordementDePile() throws Exception {
+        // PDPage.removeResources, appelé après chaque page, retire de son cache chaque formulaire puis
+        // descend dans ses ressources : un niveau de récursion par formulaire en cache. Mis en cache par
+        // la reconstitution, les 5 859 formulaires de VERRON2.pdf ont fait déborder la pile en prod.
+        Path pdf = createSharedResourcesForms(tempDir.resolve("formulaires.pdf"), 3000);
+        AtomicReference<Object> outcome = new AtomicReference<>();
+        Thread thread = new Thread(null, () -> {
+            try {
+                outcome.set(text(extract(pdf)));
+            } catch (Throwable t) {
+                outcome.set(t);
+            }
+        }, "pile-reduite", 256 * 1024);
+        thread.start();
+        thread.join();
+
+        assertThat(outcome.get()).asString().contains(TEXT);
     }
 
     @Test

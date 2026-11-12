@@ -43,9 +43,17 @@ public final class LogCapture implements AutoCloseable {
      * @return les messages capturés au niveau donné, dans l'ordre d'émission
      */
     public List<String> messages(Level level) {
+        return events(level).stream()
+                .map(event -> event.getMessage().getFormattedMessage())
+                .toList();
+    }
+
+    /**
+     * @return les événements capturés au niveau donné, dans l'ordre d'émission (pour en lire l'exception)
+     */
+    public List<LogEvent> events(Level level) {
         return events.stream()
                 .filter(event -> event.getLevel() == level)
-                .map(event -> event.getMessage().getFormattedMessage())
                 .toList();
     }
 

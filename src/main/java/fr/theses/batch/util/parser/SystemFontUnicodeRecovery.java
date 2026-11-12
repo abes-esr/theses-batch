@@ -1,5 +1,6 @@
 package fr.theses.batch.util.parser;
 
+import fr.theses.batch.util.log.PdfWarningCollector;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.fontbox.cmap.CMap;
 import org.apache.fontbox.cmap.CMapParser;
@@ -15,7 +16,6 @@ import org.apache.pdfbox.pdmodel.font.PDFont;
 import org.apache.pdfbox.pdmodel.font.PDSimpleFont;
 import org.apache.pdfbox.pdmodel.font.PDType0Font;
 import org.apache.pdfbox.pdmodel.font.encoding.Encoding;
-import org.apache.pdfbox.pdmodel.graphics.form.PDFormXObject;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -95,8 +95,20 @@ public class SystemFontUnicodeRecovery {
         if (resources == null || !visited.add(resources.getCOSObject())) {
             return;
         }
+        COSDictionary fonts = resources.getCOSObject().getCOSDictionary(COSName.FONT);
         for (COSName name : resources.getFontNames()) {
             try {
+                // avant toute instanciation de la police, ici comme dans PDFTextStripper
+                COSDictionary fontDictionary = fonts == null ? null : fonts.getCOSDictionary(name);
+                if (CidToGidMapLimiter.limit(fontDictionary)) {
+                    // comptée dans le récapitulatif du fichier, une ligne à part seulement hors traitement d'un PDF
+                    String baseFont = String.valueOf(fontDictionary.getNameAsString(COSName.BASE_FONT));
+                    if (!PdfWarningCollector.record("WARN SystemFontUnicodeRecovery - Table /CIDToGIDMap démesurée "
+                            + "tronquée, police " + PdfWarningCollector.fontName(baseFont))) {
+                        log.warn("Police {} : table /CIDToGIDMap démesurée, tronquée à {} octets",
+                                baseFont, CidToGidMapLimiter.MAX_DECODED_BYTES);
+                    }
+                }
                 PDFont font = resources.getFont(name);
                 if (font != null && visited.add(font.getCOSObject())) {
                     Set<Integer> codes = recover(font);
@@ -108,13 +120,16 @@ public class SystemFontUnicodeRecovery {
                 log.debug("Police {} ignorée : {}", name.getName(), e.getMessage());
             }
         }
+        // Formulaires lus au niveau COS, sans resources.getXObject() qui les mettrait en cache : après
+        // chaque page, PDPage.removeResources retire du cache chaque formulaire puis descend dans ses
+        // ressources, un niveau de récursion par formulaire en cache. Quand les formulaires partagent les
+        // ressources de la page (5 859 dans un PDF de prod), la pile déborde.
+        COSDictionary xObjects = resources.getCOSObject().getCOSDictionary(COSName.XOBJECT);
         for (COSName name : resources.getXObjectNames()) {
-            try {
-                if (resources.getXObject(name) instanceof PDFormXObject form) {
-                    scan(form.getResources(), visited, recovered);
-                }
-            } catch (IOException | IllegalStateException e) {
-                log.debug("XObject {} ignoré : {}", name.getName(), e.getMessage());
+            if (xObjects.getDictionaryObject(name) instanceof COSStream stream
+                    && COSName.FORM.equals(stream.getCOSName(COSName.SUBTYPE))
+                    && stream.getCOSDictionary(COSName.RESOURCES) instanceof COSDictionary formResources) {
+                scan(new PDResources(formResources, resources.getResourceCache()), visited, recovered);
             }
         }
     }

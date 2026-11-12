@@ -1,9 +1,11 @@
 package fr.theses.batch.job;
 
 import fr.theses.batch.support.TestPdfs;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.batch.core.BatchStatus;
+import org.springframework.batch.core.job.Job;
 import org.springframework.batch.core.job.JobExecution;
 import org.springframework.batch.core.step.StepExecution;
 import org.springframework.batch.test.JobOperatorTestUtils;
@@ -43,6 +45,15 @@ class ANRJobIntegrationTest {
     @Autowired
     private JobOperatorTestUtils jobOperatorTestUtils;
 
+    // Plusieurs jobs dans le contexte (ANR, data.gouv) : JobOperatorTestUtils ne peut pas choisir seul
+    @Autowired
+    private Job anrJob;
+
+    @BeforeEach
+    void selectJob() {
+        jobOperatorTestUtils.setJob(anrJob);
+    }
+
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
         createPdfs();
@@ -50,15 +61,22 @@ class ANRJobIntegrationTest {
         registry.add("app.run.timestamp", () -> RUN);
         registry.add("app.anr.pattern", () -> TestPdfs.ANR_PATTERN);
         registry.add("app.anr.input-dir", inputDir::toString);
-        registry.add("app.anr.output-dir", outputDir::toString);
+        registry.add("app.output-dir", outputDir::toString);
         registry.add("app.anr.max-files", () -> "100");
         registry.add("app.anr.offset", () -> "0");
         registry.add("app.anr.nb-pages", () -> "10");
         registry.add("app.anr.context-characters", () -> "8");
-        registry.add("app.anr.chunk-size", () -> "2");
+        registry.add("app.anr.chunk-size", () -> "4");
         registry.add("app.anr.exclude-keywords", () -> "annexe");
+        // vide : comportement par défaut, aucun répertoire exclu
+        registry.add("app.anr.exclude-dirs", () -> "");
         registry.add("app.anr.scan-threads", () -> "2");
+        // plusieurs threads de traitement : les lignes doivent malgré tout suivre l'ordre des chemins
+        registry.add("app.anr.process-threads", () -> "4");
         registry.add("app.anr.fonts-dir", fontsDir::toString);
+        // 0 : tous les PDF passent par la lecture par blocs, avec des blocs plus petits que les fichiers
+        registry.add("app.anr.in-memory-max-size", () -> "0");
+        registry.add("app.anr.read-block-size", () -> "4KB");
         registry.add("app.anr.writers.enabled", () -> "csv,json");
         registry.add("app.anr.writers.header", () -> "file_name,page_number,match_value,error_message,nnt");
         registry.add("app.anr.json.pretty-print", () -> "false");

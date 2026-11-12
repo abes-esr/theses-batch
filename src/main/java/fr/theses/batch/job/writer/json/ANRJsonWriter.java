@@ -56,9 +56,28 @@ public class ANRJsonWriter implements ItemWriter<ANRMatchDTO> {
         this.arrayEnd = ascii(prettyPrint ? " ]" : "]");
     }
 
+    /**
+     * Indique si le fichier d'erreurs a été créé
+     */
+    private boolean errorFileStarted = false;
+
     @Override
     public void write(Chunk<? extends ANRMatchDTO> chunk) throws IOException {
-        for (Map.Entry<String, List<ANRMatchDTO>> entry : resultRows.groupByYear(chunk.getItems()).entrySet()) {
+        // Séparer les items avec erreur des items normaux
+        List<ANRMatchDTO> errorItems = (List<ANRMatchDTO>) chunk.getItems().stream()
+                .filter(item -> item.errorMessage() != null && !item.errorMessage().isEmpty())
+                .toList();
+        List<ANRMatchDTO> normalItems = (List<ANRMatchDTO>) chunk.getItems().stream()
+                .filter(item -> item.errorMessage() == null || item.errorMessage().isEmpty())
+                .toList();
+
+        // Écrire les erreurs dans un fichier dédié (toutes années confondues)
+        if (!errorItems.isEmpty()) {
+            writeErrorItems(errorItems);
+        }
+
+        // Écrire les items normaux dans les fichiers par année
+        for (Map.Entry<String, List<ANRMatchDTO>> entry : resultRows.groupByYear(normalItems).entrySet()) {
             String year = entry.getKey();
             // Fichier commun à tout le run : les chunks suivants y sont ajoutés
             Path jsonFilePath = resultRows.resultFile(year, "json");
@@ -66,7 +85,9 @@ public class ANRJsonWriter implements ItemWriter<ANRMatchDTO> {
             boolean firstWrite = !startedYears.contains(year);
             ByteArrayOutputStream elements = new ByteArrayOutputStream();
             for (ANRMatchDTO item : entry.getValue()) {
-                for (Map<String, Object> row : resultRows.toRows(item)) {
+                ANRResultRows.Pair<List<Map<String, Object>>, List<Map<String, Object>>> separated = 
+                        resultRows.toRowsSeparated(item);
+                for (Map<String, Object> row : separated.first) {
                     if (!firstWrite || elements.size() > 0) {
                         elements.write(separator);
                     }
@@ -83,6 +104,37 @@ public class ANRJsonWriter implements ItemWriter<ANRMatchDTO> {
             } else {
                 append(jsonFilePath, elements);
             }
+        }
+    }
+
+    /**
+     * Écrit les items avec erreur dans un fichier JSON dédié
+     */
+    private void writeErrorItems(List<ANRMatchDTO> errorItems) throws IOException {
+        Path errorFilePath = resultRows.errorFile("json");
+        boolean firstWrite = !errorFileStarted;
+        ByteArrayOutputStream elements = new ByteArrayOutputStream();
+
+        for (ANRMatchDTO item : errorItems) {
+            ANRResultRows.Pair<List<Map<String, Object>>, List<Map<String, Object>>> separated = 
+                    resultRows.toRowsSeparated(item);
+            for (Map<String, Object> row : separated.second) {
+                if (!firstWrite || elements.size() > 0) {
+                    elements.write(separator);
+                }
+                elements.write(elementWriter.writeValueAsBytes(row));
+            }
+        }
+
+        if (elements.size() == 0) {
+            return;
+        }
+
+        if (firstWrite) {
+            create(errorFilePath, elements);
+            errorFileStarted = true;
+        } else {
+            append(errorFilePath, elements);
         }
     }
 

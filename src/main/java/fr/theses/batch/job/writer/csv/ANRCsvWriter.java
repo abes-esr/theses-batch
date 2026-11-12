@@ -15,6 +15,7 @@ import java.nio.file.Files;
 import java.nio.file.OpenOption;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -49,14 +50,41 @@ public class ANRCsvWriter implements ItemWriter<ANRMatchDTO> {
         this.resultRows = resultRows;
     }
 
+    /**
+     * Fichiers d'erreurs déjà créés pour éviter de réécrire l'en-tête
+     */
+    private boolean errorFileStarted = false;
+
     @Override
     public void write(Chunk<? extends ANRMatchDTO> chunk) throws IOException {
-        for (Map.Entry<String, List<ANRMatchDTO>> entry : resultRows.groupByYear(chunk.getItems()).entrySet()) {
-            // Fichier commun à tout le run : créé au premier chunk de l'année, les suivants y sont ajoutés
+        // Séparer les lignes normales des lignes d'erreur pour tous les items
+        List<Map<String, Object>> allNormalRows = new ArrayList<>();
+        List<Map<String, Object>> allErrorRows = new ArrayList<>();
+        
+        for (ANRMatchDTO item : chunk.getItems()) {
+            ANRResultRows.Pair<List<Map<String, Object>>, List<Map<String, Object>>> separated = 
+                    resultRows.toRowsSeparated(item);
+            allNormalRows.addAll(separated.first);
+            allErrorRows.addAll(separated.second);
+        }
+
+        // Écrire les erreurs dans un fichier dédié (toutes années confondues)
+        if (!allErrorRows.isEmpty()) {
+            writeErrorRows(allErrorRows);
+        }
+
+        // Écrire les lignes normales dans les fichiers par année
+        // On doit regrouper par année, mais on n'a plus l'item... 
+        // Il faut associer chaque ligne à son année
+        // On va donc reconstruire les items normaux et les écrire par année
+        List<ANRMatchDTO> normalItems = (List<ANRMatchDTO>) chunk.getItems().stream()
+                .filter(item -> item.errorMessage() == null || item.errorMessage().isEmpty())
+                .toList();
+        
+        for (Map.Entry<String, List<ANRMatchDTO>> entry : resultRows.groupByYear(normalItems).entrySet()) {
             Path csvFilePath = resultRows.resultFile(entry.getKey(), "csv");
             boolean firstWrite = startedYears.add(entry.getKey());
 
-            // UTF-8 explicite : ne pas dépendre du charset par défaut de la JVM qui exécute le batch
             try (BufferedWriter writer = Files.newBufferedWriter(csvFilePath, StandardCharsets.UTF_8,
                     firstWrite ? CREATE : APPEND)) {
                 if (firstWrite) {
@@ -64,10 +92,33 @@ public class ANRCsvWriter implements ItemWriter<ANRMatchDTO> {
                 }
 
                 for (ANRMatchDTO item : entry.getValue()) {
-                    for (Map<String, Object> row : resultRows.toRows(item)) {
+                    // Écrire seulement les lignes normales (pas les erreurs)
+                    ANRResultRows.Pair<List<Map<String, Object>>, List<Map<String, Object>>> separated = 
+                            resultRows.toRowsSeparated(item);
+                    for (Map<String, Object> row : separated.first) {
                         writer.write(toCsvLine(row));
                     }
                 }
+            }
+        }
+    }
+
+    /**
+     * Écrit directement une liste de lignes d'erreur dans un fichier dédié
+     */
+    private void writeErrorRows(List<Map<String, Object>> errorRows) throws IOException {
+        Path errorFilePath = resultRows.errorFile("csv");
+        boolean firstWrite = !errorFileStarted;
+
+        try (BufferedWriter writer = Files.newBufferedWriter(errorFilePath, StandardCharsets.UTF_8,
+                firstWrite ? CREATE : APPEND)) {
+            if (firstWrite) {
+                writer.write(String.join(SEPARATOR, resultRows.fieldNames()) + NEWLINE);
+                errorFileStarted = true;
+            }
+
+            for (Map<String, Object> row : errorRows) {
+                writer.write(toCsvLine(row));
             }
         }
     }

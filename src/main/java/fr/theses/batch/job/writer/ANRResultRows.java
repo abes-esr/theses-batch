@@ -70,6 +70,24 @@ public class ANRResultRows {
     }
 
     /**
+     * Groupe les items avec erreur par année de soutenance
+     */
+    public Map<String, List<ANRMatchDTO>> groupErrorsByYear(List<? extends ANRMatchDTO> items) {
+        return items.stream()
+                .filter(item -> item.errorMessage() != null && !item.errorMessage().isEmpty())
+                .collect(Collectors.groupingBy(this::extractYear));
+    }
+
+    /**
+     * Extrait les items avec erreur de la liste
+     */
+    public List<ANRMatchDTO> extractErrors(List<? extends ANRMatchDTO> items) {
+        return (List<ANRMatchDTO>) items.stream()
+                .filter(item -> item.errorMessage() != null && !item.errorMessage().isEmpty())
+                .toList();
+    }
+
+    /**
      * Fichier de résultats d'une année pour le run en cours, son répertoire étant créé au besoin
      * Un seul fichier par année et par format pour tout le run : les chunks successifs y écrivent tous
      *
@@ -78,6 +96,17 @@ public class ANRResultRows {
      */
     public Path resultFile(String year, String extension) throws IOException {
         Path path = Path.of(outputDir, runTimestamp + "_anr_results_" + year + "." + extension);
+        Files.createDirectories(path.getParent());
+        return path;
+    }
+
+    /**
+     * Fichier de résultats pour les erreurs, commun à toutes les années
+     *
+     * @param extension l'extension du format, sans point
+     */
+    public Path errorFile(String extension) throws IOException {
+        Path path = Path.of(outputDir, runTimestamp + "_anr_errors." + extension);
         Files.createDirectories(path.getParent());
         return path;
     }
@@ -101,6 +130,49 @@ public class ANRResultRows {
             rows.add(toRow(item, null));
         }
         return rows;
+    }
+
+    /**
+     * Sépare les lignes d'un item en lignes normales et lignes d'erreur.
+     * Une ligne est considérée comme une erreur si elle contient un message d'erreur non vide.
+     *
+     * @param item l'item à traiter
+     * @return une paire : (lignes normales, lignes d'erreur)
+     */
+    public Pair<List<Map<String, Object>>, List<Map<String, Object>>> toRowsSeparated(ANRMatchDTO item) {
+        List<Map<String, Object>> normalRows = new ArrayList<>();
+        List<Map<String, Object>> errorRows = new ArrayList<>();
+        boolean hasError = item.errorMessage() != null && !item.errorMessage().isEmpty();
+
+        // Ajouter les lignes de correspondance (normales)
+        for (ANRPageMatchDTO pageMatch : item.pageMatches()) {
+            normalRows.add(toRow(item, pageMatch));
+        }
+        
+        // Si pas de correspondance et pas d'erreur, ajouter une ligne vide
+        if (item.pageMatches().isEmpty() && !hasError) {
+            normalRows.add(toRow(item, null));
+        }
+        
+        // Si erreur, ajouter la ligne d'erreur
+        if (hasError) {
+            errorRows.add(toRow(item, null));
+        }
+        
+        return new Pair<>(normalRows, errorRows);
+    }
+
+    /**
+     * Classe utilitaire pour retourner une paire de listes
+     */
+    public static class Pair<A, B> {
+        public final A first;
+        public final B second;
+        
+        public Pair(A first, B second) {
+            this.first = first;
+            this.second = second;
+        }
     }
 
     private Map<String, Object> toRow(ANRMatchDTO item, ANRPageMatchDTO pageMatch) {

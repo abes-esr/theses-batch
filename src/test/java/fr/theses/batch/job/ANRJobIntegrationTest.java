@@ -98,7 +98,7 @@ class ANRJobIntegrationTest {
             TestPdfs.create(inputDir.resolve("THESE_3/these.pdf"), "Labex et PIA");
             Files.createDirectories(inputDir.resolve("THESE_4"));
             Files.writeString(inputDir.resolve("THESE_4/corrompu.pdf"), "pas un pdf");
-            // PDF « Word » sans /ToUnicode : le numéro n'est lisible que grâce à la police système
+            // PDF Word sans /ToUnicode : le numéro n'est lisible que grâce à la police système
             TestPdfs.createType0WithoutToUnicode(inputDir.resolve("THESE_5/word.pdf"), "Projet ANR-21-WORD-0005");
             TestPdfs.installFont(fontsDir);
         } catch (IOException e) {
@@ -123,12 +123,21 @@ class ANRJobIntegrationTest {
                 "\"these.pdf\",2,\"ANR-15-CE23-0001\",,",
                 "\"these.pdf\",1,\"Labex\",,",
                 "\"these.pdf\",1,\"PIA\",,");
-        // Le PDF corrompu produit une ligne d'erreur ; les lignes suivent l'ordre des chemins
-        assertThat(csv).hasSize(6);
-        assertThat(csv.get(4)).startsWith("\"corrompu.pdf\",,,\"Erreur PDF:");
-        assertThat(csv.get(5)).isEqualTo("\"word.pdf\",1,\"ANR-21-WORD-0005\",,");
+        // Les erreurs vont dans le fichier dédié, pas dans le CSV principal
+        assertThat(csv).hasSize(5);
+        assertThat(csv.get(4)).isEqualTo("\"word.pdf\",1,\"ANR-21-WORD-0005\",,");
+
+        // Vérifier que le PDF corrompu est dans le fichier d'erreurs
+        List<String> csvErrors = Files.readAllLines(outputDir.resolve(RUN + "_anr_errors.csv"));
+        assertThat(csvErrors.getFirst()).isEqualTo("file_name,page_number,match_value,error_message,nnt");
+        assertThat(csvErrors).hasSize(2);
+        assertThat(csvErrors.get(1)).startsWith("\"corrompu.pdf\",,,\"Erreur PDF:");
 
         String json = Files.readString(outputDir.resolve(RUN + "_anr_results_unknown.json"));
-        assertThat(json).startsWith("[{").contains("\"match_value\":\"ANR-15-CE23-0001\"").contains("corrompu.pdf");
+        assertThat(json).startsWith("[{ ").contains("\"match_value\":\"ANR-15-CE23-0001\"").doesNotContain("corrompu.pdf");
+
+        // Vérifier que le PDF corrompu est dans le fichier d'erreurs JSON
+        String jsonErrors = Files.readString(outputDir.resolve(RUN + "_anr_errors.json"));
+        assertThat(jsonErrors).contains("\"file_name\":\"corrompu.pdf\" ").contains("\"error_message\":\"Erreur PDF:");
     }
 }

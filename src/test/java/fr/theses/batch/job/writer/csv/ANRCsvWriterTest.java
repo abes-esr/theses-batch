@@ -34,6 +34,10 @@ class ANRCsvWriterTest {
         return outputDir.resolve(RUN + "_anr_results_" + year + ".csv");
     }
 
+    private Path csvErrors() {
+        return outputDir.resolve(RUN + "_anr_errors.csv");
+    }
+
     private static ANRMatchDTO item(String name, List<ANRPageMatchDTO> pages, String error, LocalDate date) {
         return new ANRMatchDTO("/d/" + name, name, pages, 3, 10, 1.23456, error, null, null, date);
     }
@@ -78,8 +82,13 @@ class ANRCsvWriterTest {
         writer.write(Chunk.of(item("a.pdf", List.of(), null, null)));
         writer.write(Chunk.of(item("b.pdf", List.of(), null, null), item("c.pdf", List.of(), "err", null)));
 
+        // c.pdf a une erreur, donc il est dans le fichier d'erreurs, pas dans le CSV principal
         assertThat(Files.readAllLines(csv("unknown")))
-                .containsExactly("file_name", "\"a.pdf\"", "\"b.pdf\"", "\"c.pdf\"");
+                .containsExactly("file_name", "\"a.pdf\"", "\"b.pdf\"");
+
+        // Vérifier que c.pdf est dans le fichier d'erreurs
+        assertThat(Files.readAllLines(csvErrors()))
+                .containsExactly("file_name", "\"c.pdf\"");
     }
 
     @Test

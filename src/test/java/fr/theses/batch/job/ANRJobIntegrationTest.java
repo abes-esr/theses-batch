@@ -134,10 +134,10 @@ class ANRJobIntegrationTest {
         assertThat(csvErrors.get(1)).startsWith("\"corrompu.pdf\",,,\"Erreur PDF:");
 
         String json = Files.readString(outputDir.resolve(RUN + "_anr_results_unknown.json"));
-        assertThat(json).startsWith("[{ ").contains("\"match_value\":\"ANR-15-CE23-0001\"").doesNotContain("corrompu.pdf");
+        assertThat(json).startsWith("[{").contains("\"match_value\":\"ANR-15-CE23-0001\"").doesNotContain("corrompu.pdf");
 
         // Vérifier que le PDF corrompu est dans le fichier d'erreurs JSON
         String jsonErrors = Files.readString(outputDir.resolve(RUN + "_anr_errors.json"));
-        assertThat(jsonErrors).contains("\"file_name\":\"corrompu.pdf\" ").contains("\"error_message\":\"Erreur PDF:");
+        assertThat(jsonErrors).contains("\"file_name\":\"corrompu.pdf\"").contains("\"error_message\":\"Erreur PDF:");
     }
 }

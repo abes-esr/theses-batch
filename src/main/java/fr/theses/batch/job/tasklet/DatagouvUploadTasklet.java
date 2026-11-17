@@ -26,6 +26,7 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -291,10 +292,12 @@ public class DatagouvUploadTasklet implements Tasklet {
      *
      * @throws IllegalStateException si la réponse est illisible ou ne correspond pas au fichier envoyé.
      */
-    private void checkPublished(String resourceId, long expectedSize, String responseBody) {
+    private void checkPublished(String resourceId, long expectedSize, String response) {
+        // Réponse sans corps : body(String.class) renvoie null
+        String responseBody = Objects.requireNonNullElse(response, "");
         JsonNode resource;
         try {
-            resource = JSON.readTree(responseBody == null ? "" : responseBody);
+            resource = JSON.readTree(responseBody);
         } catch (JacksonException e) {
             throw new IllegalStateException("Réponse de data.gouv.fr illisible pour la ressource " + resourceId
                     + " : impossible de vérifier que le fichier a été remplacé. Réponse : " + abbreviate(responseBody), e);
@@ -318,7 +321,7 @@ public class DatagouvUploadTasklet implements Tasklet {
     }
 
     private static String abbreviate(String text) {
-        if (text == null || text.isBlank()) {
+        if (text.isBlank()) {
             return "(vide)";
         }
         return text.length() <= 500 ? text : text.substring(0, 500) + "…";

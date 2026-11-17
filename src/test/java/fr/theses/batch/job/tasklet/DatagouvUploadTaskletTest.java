@@ -299,6 +299,77 @@ class DatagouvUploadTaskletTest {
     }
 
     @Test
+    void execute_quandLaReponseNEstPasDuJson_echoueAvecUnExtraitTronque() throws IOException {
+        createExports();
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        // Page HTML (proxy, page d'erreur...) au lieu de la ressource : seuls 500 caractères sont repris dans le message
+        String html = "<html>" + "x".repeat(600) + "</html>";
+        server.expect(requestTo(BASE_URL + "csvId/upload/")).andRespond(withSuccess(html, MediaType.TEXT_HTML));
+
+        DatagouvUploadTasklet tasklet = tasklet(builder.build(), true);
+
+        assertThatThrownBy(() -> tasklet.execute(mock(StepContribution.class), mock(ChunkContext.class)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Réponse de data.gouv.fr illisible pour la ressource csvId")
+                .hasMessageContaining("<html>" + "x".repeat(494) + "…")
+                .hasMessageNotContaining("</html>");
+        server.verify();
+    }
+
+    @Test
+    void execute_quandDataGouvRenvoieUneAutreRessource_echoueAvecLaReponseComplete() throws IOException {
+        createExports();
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo(BASE_URL + "csvId/upload/")).andRespond(resource("autreId", 11));
+
+        DatagouvUploadTasklet tasklet = tasklet(builder.build(), true);
+
+        // Réponse courte : reprise en entier dans le message
+        assertThatThrownBy(() -> tasklet.execute(mock(StepContribution.class), mock(ChunkContext.class)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("n'a pas renvoyé la ressource csvId")
+                .hasMessageContaining("\"id\": \"autreId\"")
+                .hasMessageContaining("\"success\": true}");
+        server.verify();
+    }
+
+    @Test
+    void execute_quandLaTailleEstAbsenteDeLaRessource_echoue() throws IOException {
+        createExports();
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo(BASE_URL + "csvId/upload/"))
+                .andRespond(withSuccess("{\"id\": \"csvId\"}", MediaType.APPLICATION_JSON));
+
+        DatagouvUploadTasklet tasklet = tasklet(builder.build(), true);
+
+        assertThatThrownBy(() -> tasklet.execute(mock(StepContribution.class), mock(ChunkContext.class)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("taille de (absente) octets au lieu de 11")
+                .hasMessageContaining("URL publiée : (absente)");
+        server.verify();
+    }
+
+    @Test
+    void execute_quandDataGouvRedirigeSansLocation_echoueQuandMeme() throws IOException {
+        createExports();
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo(BASE_URL + "csvId/upload/")).andRespond(withStatus(HttpStatus.FOUND));
+
+        DatagouvUploadTasklet tasklet = tasklet(builder.build(), true);
+
+        assertThatThrownBy(() -> tasklet.execute(mock(StepContribution.class), mock(ChunkContext.class)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("302")
+                .hasMessageNotContaining("redirection vers")
+                .hasMessageContaining("la requête n'a pas été traitée");
+        server.verify();
+    }
+
+    @Test
     void constructeur_pauseNegative_leveIllegalArgumentException() {
         RestClient restClient = mock(RestClient.class);
         String outputDir = tempDir.toString();

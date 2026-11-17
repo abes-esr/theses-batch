@@ -145,6 +145,13 @@ class DatagouvJobIntegrationTest {
     }
 
     @Test
+    void job_sansIncrementer_pourQueLesParametresDuLancementSoientEnregistres() {
+        // Avec un incrementer, JobOperator.start ignore les paramètres fournis (modeTest, uploadEnabled) :
+        // DatagouvJobRunDecider compterait alors un run de test comme une publication (règle des 6 mois).
+        assertThat(thesesDumpDataGouvJob.getJobParametersIncrementer()).isNull();
+    }
+
+    @Test
     void jobComplet_ecritLesTroisExports() throws Exception {
         JobExecution execution = jobOperatorTestUtils.startJob();
 

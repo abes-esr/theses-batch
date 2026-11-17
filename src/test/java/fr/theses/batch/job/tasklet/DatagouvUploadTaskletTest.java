@@ -6,13 +6,17 @@ import org.junit.jupiter.api.io.TempDir;
 import org.springframework.batch.core.scope.context.ChunkContext;
 import org.springframework.batch.core.step.StepContribution;
 import org.springframework.batch.infrastructure.repeat.RepeatStatus;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.test.web.client.ResponseCreator;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 
 import java.io.IOException;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -32,6 +36,7 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withBadRequest;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 /**
@@ -180,7 +185,7 @@ class DatagouvUploadTaskletTest {
                         field("totalparts", "3"),
                         containsString("name=\"uuid\""),
                         not(containsString("name=\"file\"")))))
-                .andRespond(withSuccess());
+                .andRespond(resource("csvId", 25));
         expectUpload(server, "jsonId", "theses-soutenues.json", "[]");
         expectUpload(server, "jsonlId", "theses-soutenues.jsonl", "{}");
         expectUpload(server, "jsonlGzId", "theses-soutenues.jsonl.gz", "gz");
@@ -208,7 +213,7 @@ class DatagouvUploadTaskletTest {
                     .andExpect(content().string(containsString(upload[2])))
                     .andRespond(request -> {
                         events.add(upload[0]);
-                        return withSuccess().createResponse(request);
+                        return resource(upload[0], upload[2].length()).createResponse(request);
                     });
         }
         DatagouvUploadTasklet tasklet = new DatagouvUploadTasklet(builder.build(), DATA_GOUV_URL, "datasetId", "csvId",
@@ -236,6 +241,131 @@ class DatagouvUploadTaskletTest {
         assertThatThrownBy(() -> tasklet.execute(mock(StepContribution.class), mock(ChunkContext.class)))
                 .isInstanceOf(HttpClientErrorException.BadRequest.class);
         assertThat(pauses).isEmpty();
+        server.verify();
+    }
+
+    @Test
+    void execute_quandDataGouvRedirige_echoueAuLieuDeSignalerUnSucces() throws IOException {
+        createExports();
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        HttpHeaders headers = new HttpHeaders();
+        headers.setLocation(URI.create("https://www.data.gouv.fr/api/1/datasets/datasetId/resources/csvId/upload/"));
+        server.expect(requestTo(BASE_URL + "csvId/upload/"))
+                .andRespond(withStatus(HttpStatus.MOVED_PERMANENTLY).headers(headers));
+
+        DatagouvUploadTasklet tasklet = tasklet(builder.build(), true);
+
+        // RestClient accepte un 301 sans erreur : sans contrôle, le batch écrirait « Téléversement réussi »
+        assertThatThrownBy(() -> tasklet.execute(mock(StepContribution.class), mock(ChunkContext.class)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("301")
+                .hasMessageContaining("redirection vers https://www.data.gouv.fr/")
+                .hasMessageContaining("DATA_GOUV_BASE_URL");
+        server.verify();
+    }
+
+    @Test
+    void execute_quandLaRessourceRenvoyeeNAPasLaTailleDuFichier_echoue() throws IOException {
+        createExports();
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        // Réponse 200 mais la ressource garde son ancien fichier (taille différente)
+        server.expect(requestTo(BASE_URL + "csvId/upload/")).andRespond(resource("csvId", 1526917179L));
+
+        DatagouvUploadTasklet tasklet = tasklet(builder.build(), true);
+
+        assertThatThrownBy(() -> tasklet.execute(mock(StepContribution.class), mock(ChunkContext.class)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("taille de 1526917179 octets au lieu de 11")
+                .hasMessageContaining("n'a pas été remplacé");
+        server.verify();
+    }
+
+    @Test
+    void execute_quandLaReponseNEstPasLaRessource_echoue() throws IOException {
+        createExports();
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        // Réponse 200 sans la ressource : rien ne prouve que le fichier a été remplacé
+        server.expect(requestTo(BASE_URL + "csvId/upload/")).andRespond(withSuccess());
+
+        DatagouvUploadTasklet tasklet = tasklet(builder.build(), true);
+
+        assertThatThrownBy(() -> tasklet.execute(mock(StepContribution.class), mock(ChunkContext.class)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("n'a pas renvoyé la ressource csvId");
+        server.verify();
+    }
+
+    @Test
+    void execute_quandLaReponseNEstPasDuJson_echoueAvecUnExtraitTronque() throws IOException {
+        createExports();
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        // Page HTML (proxy, page d'erreur...) au lieu de la ressource : seuls 500 caractères sont repris dans le message
+        String html = "<html>" + "x".repeat(600) + "</html>";
+        server.expect(requestTo(BASE_URL + "csvId/upload/")).andRespond(withSuccess(html, MediaType.TEXT_HTML));
+
+        DatagouvUploadTasklet tasklet = tasklet(builder.build(), true);
+
+        assertThatThrownBy(() -> tasklet.execute(mock(StepContribution.class), mock(ChunkContext.class)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Réponse de data.gouv.fr illisible pour la ressource csvId")
+                .hasMessageContaining("<html>" + "x".repeat(494) + "…")
+                .hasMessageNotContaining("</html>");
+        server.verify();
+    }
+
+    @Test
+    void execute_quandDataGouvRenvoieUneAutreRessource_echoueAvecLaReponseComplete() throws IOException {
+        createExports();
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo(BASE_URL + "csvId/upload/")).andRespond(resource("autreId", 11));
+
+        DatagouvUploadTasklet tasklet = tasklet(builder.build(), true);
+
+        // Réponse courte : reprise en entier dans le message
+        assertThatThrownBy(() -> tasklet.execute(mock(StepContribution.class), mock(ChunkContext.class)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("n'a pas renvoyé la ressource csvId")
+                .hasMessageContaining("\"id\": \"autreId\"")
+                .hasMessageContaining("\"success\": true}");
+        server.verify();
+    }
+
+    @Test
+    void execute_quandLaTailleEstAbsenteDeLaRessource_echoue() throws IOException {
+        createExports();
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo(BASE_URL + "csvId/upload/"))
+                .andRespond(withSuccess("{\"id\": \"csvId\"}", MediaType.APPLICATION_JSON));
+
+        DatagouvUploadTasklet tasklet = tasklet(builder.build(), true);
+
+        assertThatThrownBy(() -> tasklet.execute(mock(StepContribution.class), mock(ChunkContext.class)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("taille de (absente) octets au lieu de 11")
+                .hasMessageContaining("URL publiée : (absente)");
+        server.verify();
+    }
+
+    @Test
+    void execute_quandDataGouvRedirigeSansLocation_echoueQuandMeme() throws IOException {
+        createExports();
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo(BASE_URL + "csvId/upload/")).andRespond(withStatus(HttpStatus.FOUND));
+
+        DatagouvUploadTasklet tasklet = tasklet(builder.build(), true);
+
+        assertThatThrownBy(() -> tasklet.execute(mock(StepContribution.class), mock(ChunkContext.class)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("302")
+                .hasMessageNotContaining("redirection vers")
+                .hasMessageContaining("la requête n'a pas été traitée");
         server.verify();
     }
 
@@ -315,6 +445,15 @@ class DatagouvUploadTaskletTest {
                         containsString("name=\"file\""),
                         containsString("filename=\"" + uploadName + "\""),
                         containsString(fileContent))))
-                .andRespond(withSuccess());
+                .andRespond(resource(resourceId, fileContent.length()));
+    }
+
+    /**
+     * Réponse de data.gouv.fr après un envoi : la ressource mise à jour (id, url, taille du fichier).
+     */
+    private static ResponseCreator resource(String resourceId, long filesize) {
+        return withSuccess("{\"id\": \"" + resourceId + "\", \"filesize\": " + filesize
+                + ", \"url\": \"https://static.data.gouv.fr/resources/x/" + resourceId + "\","
+                + " \"last_modified\": \"2026-11-17T02:10:00+00:00\", \"success\": true}", MediaType.APPLICATION_JSON);
     }
 }

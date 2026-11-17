@@ -12,6 +12,9 @@ import org.jspecify.annotations.NonNull;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestClient;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.io.File;
 import java.io.IOException;
@@ -36,6 +39,9 @@ import java.util.UUID;
  * Si le mode test ou upload-enabled=false est configuré, l'upload est ignoré : un export
  * de test (limité à 50 thèses) ne doit jamais remplacer les ressources publiées.
  * <p>
+ * Un envoi n'est considéré comme réussi que si data.gouv.fr renvoie la ressource visée avec la taille
+ * du fichier envoyé : une redirection ou une réponse 2xx sans cette ressource fait échouer le run.
+ * <p>
  * Une pause configurable (pauseBetweenFiles) sépare deux envois : elle laisse data.gouv.fr terminer
  * l'assemblage et les traitements du fichier précédent avant d'en assembler un autre.
  * <p>
@@ -48,6 +54,7 @@ import java.util.UUID;
 public class DatagouvUploadTasklet implements Tasklet {
 
     private static final String UPLOAD_PATH = "/api/1/datasets/{datasetId}/resources/{resourceId}/upload/";
+    private static final JsonMapper JSON = JsonMapper.builder().build();
 
     private final RestClient restClient;
     private final String baseUrl;
@@ -264,15 +271,57 @@ public class DatagouvUploadTasklet implements Tasklet {
         log.info("Téléversement du fichier {} ({}) vers data.gouv.fr sous le nom {}. Taille: {} octets, {} morceau(x).",
                 localFileName, formatName, targetUploadName, size, totalParts);
 
+        String publishedResource;
         if (totalParts == 1) {
             MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
             body.add("file", new NamedFileSystemResource(file, targetUploadName));
-            post(resourceId, body);
+            publishedResource = postAndReadResource(resourceId, body);
         } else {
-            uploadInChunks(file, resourceId, targetUploadName, totalParts);
+            publishedResource = uploadInChunks(file, resourceId, targetUploadName, totalParts);
         }
 
+        checkPublished(resourceId, size, publishedResource);
         log.info("Téléversement réussi pour le fichier {} sous le nom {}.", localFileName, targetUploadName);
+    }
+
+    /**
+     * Vérifie, dans la ressource renvoyée par data.gouv.fr après l'envoi (ou l'assemblage final),
+     * que c'est bien la ressource visée et que son fichier a la taille du fichier envoyé.
+     * Une réponse 2xx seule ne prouve pas que le fichier a été remplacé.
+     *
+     * @throws IllegalStateException si la réponse est illisible ou ne correspond pas au fichier envoyé.
+     */
+    private void checkPublished(String resourceId, long expectedSize, String responseBody) {
+        JsonNode resource;
+        try {
+            resource = JSON.readTree(responseBody == null ? "" : responseBody);
+        } catch (JacksonException e) {
+            throw new IllegalStateException("Réponse de data.gouv.fr illisible pour la ressource " + resourceId
+                    + " : impossible de vérifier que le fichier a été remplacé. Réponse : " + abbreviate(responseBody), e);
+        }
+        // path() renvoie un nœud « absent » (jamais null) pour un champ manquant ou une réponse vide
+        String id = resource.path("id").asString("");
+        JsonNode filesize = resource.path("filesize");
+        String url = resource.path("url").asString("(absente)");
+
+        if (!resourceId.equals(id)) {
+            throw new IllegalStateException("data.gouv.fr n'a pas renvoyé la ressource " + resourceId
+                    + " après l'envoi : le fichier n'a pas été remplacé. Réponse : " + abbreviate(responseBody));
+        }
+        if (!filesize.isIntegralNumber() || filesize.longValue() != expectedSize) {
+            throw new IllegalStateException("Après l'envoi, la ressource " + resourceId + " sur data.gouv.fr a une taille de "
+                    + filesize.asString("(absente)") + " octets au lieu de " + expectedSize
+                    + " : le fichier n'a pas été remplacé. URL publiée : " + url);
+        }
+        log.info("Ressource {} publiée sur data.gouv.fr : {} ({} octets, modifiée le {}).", resourceId, url,
+                expectedSize, resource.path("last_modified").asString("(date absente)"));
+    }
+
+    private static String abbreviate(String text) {
+        if (text == null || text.isBlank()) {
+            return "(vide)";
+        }
+        return text.length() <= 500 ? text : text.substring(0, 500) + "…";
     }
 
     /**
@@ -280,7 +329,7 @@ public class DatagouvUploadTasklet implements Tasklet {
      * chaque morceau porte uuid, partindex, totalparts et chunksize ; la requête finale, sans
      * fichier, déclenche l'assemblage et remplace le fichier de la ressource.
      */
-    private void uploadInChunks(File file, String resourceId, String targetUploadName, int totalParts) throws IOException {
+    private String uploadInChunks(File file, String resourceId, String targetUploadName, int totalParts) throws IOException {
         String uuid = UUID.randomUUID().toString();
         byte[] buffer = new byte[chunkSize];
         try (InputStream in = Files.newInputStream(file.toPath())) {
@@ -296,7 +345,8 @@ public class DatagouvUploadTasklet implements Tasklet {
                 log.debug("Morceau {}/{} de {} envoyé ({} octets).", partIndex + 1, totalParts, targetUploadName, read);
             }
         }
-        post(resourceId, chunkFields(uuid, targetUploadName, totalParts));
+        // Requête d'assemblage : data.gouv.fr y répond avec la ressource mise à jour
+        return postAndReadResource(resourceId, chunkFields(uuid, targetUploadName, totalParts));
     }
 
     /**
@@ -310,14 +360,36 @@ public class DatagouvUploadTasklet implements Tasklet {
         return body;
     }
 
+    /** Envoi d'un morceau : seul le statut compte. */
     private void post(String resourceId, MultiValueMap<String, Object> body) {
-        restClient.post()
+        send(resourceId, body).toBodilessEntity();
+    }
+
+    /** Envoi complet ou requête d'assemblage : renvoie la ressource (JSON) mise à jour par data.gouv.fr. */
+    private String postAndReadResource(String resourceId, MultiValueMap<String, Object> body) {
+        return send(resourceId, body).body(String.class);
+    }
+
+    /**
+     * Les 4xx/5xx gardent le traitement par défaut de RestClient (HttpClientErrorException...). Les autres
+     * statuts hors 2xx, redirections comprises, sont des échecs : RestClient les accepte par défaut, et
+     * le client HTTP ne suit pas les redirections d'un POST, donc la requête n'a pas atteint l'API.
+     */
+    private RestClient.ResponseSpec send(String resourceId, MultiValueMap<String, Object> body) {
+        return restClient.post()
                 .uri(baseUrl + UPLOAD_PATH, datasetId, resourceId)
                 .header("X-API-KEY", apiKey)
                 .contentType(MediaType.MULTIPART_FORM_DATA)
                 .body(body)
                 .retrieve()
-                .toBodilessEntity();
+                .onStatus(status -> !status.is2xxSuccessful() && !status.isError(), (request, response) -> {
+                    throw new IllegalStateException("data.gouv.fr a répondu " + response.getStatusCode() + " à "
+                            + request.getMethod() + " " + request.getURI()
+                            + (response.getHeaders().getLocation() == null ? ""
+                                : " (redirection vers " + response.getHeaders().getLocation() + ")")
+                            + " : la requête n'a pas été traitée. Vérifier DATA_GOUV_BASE_URL"
+                            + " (adresse exacte de l'API, par exemple https://www.data.gouv.fr).");
+                });
     }
 
     /**
